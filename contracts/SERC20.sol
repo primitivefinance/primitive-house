@@ -5,7 +5,7 @@ import { IHouse } from "./interfaces/IHouse.sol";
 import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
 import {PrimitiveERC20} from "./PrimitiveERC20.sol";
 
-contract SERC20 is ERC20, ISERC20 {
+contract SERC20 is PrimitiveERC20, ISERC20 {
     IHouse public house;
 
     string private _name;
@@ -17,8 +17,8 @@ contract SERC20 is ERC20, ISERC20 {
         house = IHouse(houseAddress);
         string memory assetName = ISERC20(asset).name();
         string memory assetSymbol = ISERC20(asset).symbol();
-        _name = string(abi.encodePacked("Synthetic Primitive", assetName));
-        _symbol = string(abi.encodePacked("sp", assetSymbol));
+        _name = string(abi.encodePacked("Virtual Primitive", assetName));
+        _symbol = string(abi.encodePacked("vp", assetSymbol));
     }
 
     function name() public override view returns (string memory) {

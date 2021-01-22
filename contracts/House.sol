@@ -2,16 +2,23 @@
 pragma solidity >=0.6.2;
 
 /**
- * @title   The Primitive House contract base.
+ * @title   The Primitive House -> Manages collateral, leverages liquidity.
  * @author  Primitive
  */
 
-
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
-import {IOption} from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
+import {
+    IOption
+} from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
 import {ISERC20} from "./interfaces/ISERC20.sol";
 import {IVenue} from "./interfaces/IVenue.sol";
+// WETH Interface
+import {IWETH} from "./interfaces/IWETH.sol";
+import {PrimitiveRouterLib} from "./libraries/PrimitiveRouterLib.sol";
+import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
 
 // Uni
 import {
@@ -21,36 +28,50 @@ import {
     IUniswapV2Pair
 } from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
-contract House {
+import {ICapitol} from "./interfaces/ICapitol";
+import {Virtualizer} from "./Virtualizer.sol";
+import {VirtualRouter} from "./VirtualRouter.sol";
+import {Accelerator} from "./Accelerator.sol";
+
+contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
     using SafeERC20 for IERC20;
     using SafeERC20 for IOption;
     using SafeMath for uint256;
 
-    struct ReserveData {
-        ISERC20 syntheticToken;
-    }
-
-    event SyntheticMinted(
+    // liquidity
+    event Leveraged(
+        address indexed depositor,
+        address indexed optionAddress,
+        address indexed pool,
+        uint256 quantity
+    );
+    event CollateralDeposited(
+        address indexed depositor,
+        address indexed pool,
+        uint256 liquidity
+    );
+    event CollateralWithdrawn(
+        address indexed depositor,
+        address indexed pool,
+        uint256 liquidity
+    );
+    event Collateralized(
         address indexed from,
         address indexed optionAddress,
-        uint256 quantity
+        uint256 liquidity
     );
-
-    event OpenedDebitSpread(
+    event Deleveraged(
         address indexed from,
-        address indexed longOption,
-        address indexed shortOption,
-        uint256 quantity
+        address indexed optionAddress,
+        uint256 liquidity
     );
 
-    IRegistry public registry;
+    ICapitol public capitol;
 
-    mapping(address => mapping(address => uint)) public bank;
-    mapping(address => address) public syntheticOptions;
-    mapping(address => ReserveData) internal _reserves;
+    mapping(address => mapping(address => uint256)) public bank;
 
     // mutex
-    bool private _notEntered;
+    bool private notEntered;
 
     modifier nonReentrant() {
         require(notEntered == 1, "PrimitiveHouse: NON_REENTRANT");
@@ -59,78 +80,107 @@ contract House {
         notEntered = false;
     }
 
-    constructor() public {}
-
-    // Initialize self
-    function initializeSelf(address registry_) external {
-        registry = IRegistry(registry_);
+    /// @dev Checks the quantity of an operation to make sure its not zero. Fails early.
+    modifier nonZero(uint256 quantity) {
+        require(quantity > 0, "ERR_ZERO");
+        _;
     }
 
-    function addSyntheticToken(address asset, address syntheticAsset) external {
-        ISERC20(syntheticAsset).initialize(asset, address(this));
-        ReserveData storage reserve = _reserves[asset];
-        reserve.syntheticToken = ISERC20(syntheticAsset);
+    modifier isEndorsed(address venue_) {
+        require(capitol.getIsEndorsed(venue_), "House: NOT_ENDORSED");
+        _;
     }
 
-    // Initialize a synthetic option
-    function deploySyntheticOption(address optionAddress)
+    constructor(
+        address weth_,
+        address energy_,
+        address capitol_
+    ) public VirtualRouter(weth_) Accelerator(energy_) {
+        capitol = ICapitol(capitol_);
+    }
+
+    // ==== Collateral Management ====
+
+    function depositCollateral(
+        address depositor,
+        address pool,
+        uint256 liquidity
+    ) external returns (bool) {
+        return _depositCollateral(depositor, pool, liquidity);
+    }
+
+    function _depositCollateral(
+        address depositor,
+        address pool,
+        uint256 liquidity
+    ) internal returns (bool) {
+        // Add liquidity to a depositor's respective pool balance.
+        bank[depositor][pool] = bank[depositor][pool].add(liquidity);
+        emit CollateralDeposited(depositor, pool, liquidity);
+        return true;
+    }
+
+    function withdrawCollatreral(
+        address depositor,
+        address pool,
+        uint256 liquidity
+    ) external returns (bool) {
+        return _withdrawCollateral(depositor, pool, liquidity);
+    }
+
+    function _withdrawCollateral(
+        address depositor,
+        address pool,
+        uint256 liquidity
+    ) internal returns (bool) {
+        // Add liquidity to a depositor's respective pool balance.
+        bank[depositor][pool] = bank[depositor][pool].sub(liquidity);
+        emit CollateralWithdrawn(depositor, pool, liquidity);
+        return true;
+    }
+
+    function collateralBalanceOf(address depositor, address pool)
         public
-        returns (address)
+        view
+        returns (uint256)
     {
-        (
-            address underlying,
-            address strike,
-            ,
-            uint256 baseValue,
-            uint256 quoteValue,
-            uint256 expiry
-        ) = IOption(optionAddress).getParameters();
-        // fix - this doubles the gas cost, maybe just make them synthetic?
-        address syntheticOption = registry.deployOption(
-            address(_reserves[underlying].syntheticToken),
-            address(_reserves[strike].syntheticToken),
-            baseValue,
-            quoteValue,
-            expiry
-        );
-
-        syntheticOptions[optionAddress] = syntheticOption;
-        return syntheticOption;
+        return bank[depositor][pool];
     }
 
-    // Open an account
-
-    // LP
+    // ==== 2x leverage ====
 
     /**
-     * @dev     Mints short option tokens synthetically, to deposit them into the market. 
+     * @dev     Pulls real underlying from
      * @notice  Hold LP tokens as collateral, attribute to original depositor.
      */
-    function borrowWithLP(address depositor, address pair, address longOption, uint quantity) public {
-        IOption syntheticLong = IOption(syntheticOptions[longOption]);
+    function _doublePosition(
+        address depositor,
+        address longOption,
+        uint256 quantity,
+        address router,
+        bytes memory params
+    ) internal isEndorsed(msg.sender) {
+        IOption virtualLong = IOption(virtualOptions[longOption]);
+        // get the data to call to deposit into the respective venue's pool.
+        // Example: UniswapVendor, the function we are calling with `params` is `addLiquidity`.
+        //assert(msg.sender == address(venue));
+        address redeem = virtualLong.redeemToken(); // virtual version of the redeem
+        address underlying = IOption(optionAddress).getUnderlyingTokenAddress(); // actual underlying
+        // gets the pool's address (the lp token address) to apply it to the depositor's internal balance.
+        address pool = IVenue(msg.sender).pool(longOption);
+        IERC20(redeem).approve(address(router), type(uint256).max); // approves the router to transferFrom this redeem
+        IERC20(underlying).approve(address(router), type(uint256).max); // approves the router to transferFrom this underlying
 
-        // Get synthetic token from reserve.
-        ReserveData storage reserve = _reserves[IOption(longOption)
-            .getUnderlyingTokenAddress()];
+        // this call will pull the underlyingTokens received from the virtual mint,
+        // and the short options which were virtualally minted.
+        // They will be pulled into the pool, which will issue LP tokens to this contract.
+        (bool success, bytes memory returnData) = router.call(params);
+        require(success, "ERR_POOL_DEPOSIT_FAIL");
 
-        // Mint synthetic tokens to the synthetic short option.
-        reserve.syntheticToken.mint(address(syntheticLong), quantity);
+        (uint256 amountA, uint256 amountB, uint256 liquidity) =
+            abi.decode(returnData, (uint256, uint256, uint256));
 
-        // Mint synthetic option and redeem tokens to this contract.
-        syntheticLong.mintOptions(address(this));
-
-        // Send out synthetic short option tokens to the pair.
-        address redeem = syntheticLong.redeemToken();
-         IERC20(redeem).transfer(
-            pair,
-            IERC20(redeem).balanceOf(address(this))
-        );
-
-        // call mint() on the pair to receive LP tokens
-        uint liquidity = IUniswapV2Pair(pair).mint(address(this));
-        
-        // get the balance of Lp tokens and attribute it to the original depositor
-        bank[depositor][pair] = liquidity;
+        _depositCollateral(depositor, pool, liquidity);
 
         // Final Balance Sheet
         //
@@ -144,188 +194,178 @@ contract House {
         //
         // Depositor
         // liquidity# of lp tokens held in this contract
+
+        emit Leveraged(depositor, option, pool, quantity);
     }
 
-    function withdrawFromLP(address option, address pair, uint quantity) public {
-        // get depositor balance of liquidity and send it to the pair
-        uint liquidity = bank[msg.sender][pair];
-        IERC20(pair).transfer(pair, liquidity);
+    /**
+     * @dev     Mints short option tokens virtualally, to deposit them into the market.
+     * @notice  Hold LP tokens as collateral, attribute to original depositor.
+     */
+    function doublePosition(
+        address depositor,
+        address longOption,
+        uint256 quantity,
+        address router,
+        bytes memory params
+    ) public {
+        // mint virtual options to this contract.
+        // pulls quantity of underlying tokens from depositor.
+        virtualMintFrom(depositor, longOption, quantity, address(this));
+        _doublePosition(depositor, longOption, quantity, router, params);
+    }
+
+    function doubleUnwind(
+        address depositor,
+        address option,
+        uint256 quantity,
+        address router,
+        bytes memory params
+    ) public {
+        _doubleUnwind(depositor, option, quantity, router, params);
+    }
+
+    function _doubleUnwind(
+        address depositor,
+        address option,
+        uint256 quantity,
+        address router,
+        bytes memory params
+    ) internal isEndorsed(msg.sender) {
+        address pool = IVenue(msg.sender).pool(option);
+        // get depositor balance of liquidity and then call withdraw() on venue
+        uint256 liquidity = bank[depositor][pool];
         // update balance
-        bank[msg.sender][pair] = 0;
-        // get tokens from pair
-        (uint amount0, uint amount1) = IUniswapV2Pair(pair).burn(address(this));
-        address underlying = IOption(option).underlyingTokenAddress();
-        address token0 = IUniswapV2Pair(pair).token0();
-        address token1 = IUniswapV2Pair(pair).token1();
-        uint assetAmt = token0 ==  underlying ? amount0 : amount1;
-        uint shortAmt = token0 == underlying ? amount1 : amount0;
+        _withdrawCollateral(depositor, pool, liquidity);
+
+        // withdraw liquidity to get return tokens and their amounts back to this contract.
+        //(address[] memory tokens, uint[] memory amounts) = IVenue(msg.sender).withdraw(liquidity);
+
+        // Example: uniswap. Calls removeLiquidity, which will have the unirouter pull lp tokens from this contract.
+        // After burning lp tokens, released tokens of the pair will be returned here.
+        (bool success, bytes memory returnData) = router.call(params);
+        require(success, "ERR_POOL_WITHDRAW_FAIL");
+        uint256[] memory amounts = abi.decode(returnData, (uint256[2]));
+
+        // example:
+        // ETH      1
+        // Short    3
+        //
+        // Need to determine how which tokens and how many to send back to depositor...
+        // Depositor originally deposited 2 ETH, so they are entitled to half the returned tokens.
+        //
+        // House currently has
+        // Long     2
+        //
+        // House needs to close its liability and clear its balance sheet
+        // Long     2
+        // Short    2
+        // ----------
+        // Long     0
+        // Short    0
+        // Short    1 (from LP)
+        // ETH      1 (from LP)
+        //
+        // Return 1 ETH and 1 Short to the original depositor.
+        // So we can take the sum of the outputs (assuming proportional), divide by 2, which gives us x
+        // then we close x amount of options, and return amounts-x = remainder of tokens withdrawn from lp
+        // Get virtual token from reserve.
+        address virtualOption = virtualOptions[option];
+        address redeem = IOption(option).redeemToken();
+        address underlying = IOption(option).getUnderlyingTokenAddress();
+        ReserveData memory reserve = _reserves[redeem];
+        address virtualRedeem = address(reserve.virtualToken);
+        uint256 sum;
+        uint256 amountsLength = amounts.length;
+        for (uint256 i = 0; i < amountsLength; i++) {
+            uint256 amount = amounts[i];
+            sum = sum.add(amount);
+        }
+
+        uint256 x = sum.div(2);
 
         // close the option, 4 transfers...
-        IERC20(token0 == underlying ? token1: token0).transfer(option, assetAmt);
-        IERC20(option).transfer(option, shortAmt);
-        IOption(option).closeOptions(address(this));
-        // Get synthetic token from reserve.
-        ReserveData storage reserve = _reserves[underlying];
-        // Burn synthetic tokens from this contract.
-        reserve.syntheticToken.burn(address(this), assetAmt);
+        IERC20(virtualRedeem).transfer(virtualOption, x);
+        IERC20(virtualOption).transfer(virtualOption, x);
+        IOption(virtualOption).closeOptions(address(this));
+        // Get virtual token from reserve.
+        ReserveData memory reserveU = _reserves[underlying];
+        // Burn virtual tokens from this contract.
+        reserveU.virtualToken.burn(address(this), assetAmt);
 
         // return the assets
-        IERC20(underlying).transfer(msg.sender, asset);
+        // if original sum was 4, 1 ETH + 3 Short, then 4/2 = 2 Short were burned.
+        // Which means 1 ETH + 1 Short Remains. Which is x/2 = 1 each.
+        // where 4/2 = sum / 2, and 2/2 = sum/2 / 2.
+        // amountA = 3, 3 - 4/2 = 1 Short
+        // amountB = 1, 2 - 2/2 = 1 ETH
+        IERC20(underlying).transfer(depositor, x.div(2));
+        IERC20(virtualRedeem).transfer(depositor, x.div(2));
+        emit Deleveraged(depositor, option, liquidity);
     }
 
-    // Position operations
+    // ==== 4x leverage ====
 
-    function openDebitSpread(
+    function quadPosition(
+        address depositor,
         address longOption,
-        address shortOption,
         uint256 quantity,
-        address receiver
-    ) external {
-        // assume these are calls for now
-        IOption syntheticLong = IOption(syntheticOptions[longOption]);
-        IOption syntheticShort = IOption(syntheticOptions[shortOption]);
-
-        // Check to make sure long option sufficiently covers short option.
-        uint256 longStrike = syntheticLong.getQuoteValue();
-        uint256 shortStrike = syntheticShort.getQuoteValue();
-        require(shortStrike >= longStrike, "ERR_CREDIT_SPREAD");
-
-        // e.g. short a 500 call and long a 400 call. 100 strike difference.
-        uint256 strikeDifference = shortStrike.sub(longStrike);
-
-        // Get synthetic token from reserve.
-        ReserveData storage reserve = _reserves[IOption(shortOption)
-            .getUnderlyingTokenAddress()];
-
-        // Mint synthetic tokens to the synthetic short option.
-        reserve.syntheticToken.mint(address(syntheticShort), quantity);
-
-        // Mint synthetic option and redeem tokens to this contract.
-        syntheticShort.mintOptions(address(this));
-
-        // Send out synthetic option tokens.
-        syntheticShort.transfer(receiver, quantity);
-
-        // Send out strikeDifference quantity of synthetic redeem tokens.
-        IERC20(syntheticShort.redeemToken()).transfer(
-            receiver,
-            strikeDifference
-        );
-
-        // Pull in the original long option.
-        syntheticLong.safeTransferFrom(msg.sender, address(this), quantity);
-
-        emit OpenedDebitSpread(msg.sender, longOption, shortOption, quantity);
-
-        // Final balance sheet:
+        address router,
+        bytes memory params
+    ) public {
+        // Depositor 2 ETH
+        // Bank      2 ETH (matches)
         //
-        // House
-        // Quantity# of long option tokens
-        // strikeDiff# of synthetic short option (redeem) tokens
+        // Deposits 4 ETH + 4 Short in LP
         //
-        // Receiver
-        // Quantity# of synthetic long option tokens (which can then be sold)
-        // 1 - strikeDiff# of synthetic short option (redeem) tokens
-    }
-
-    // Option operations
-
-    function syntheticMint(
-        address optionAddress,
-        uint256 quantity,
-        address receiver
-    ) external returns (address) {
-        address syntheticOption = syntheticOptions[optionAddress];
-        require(syntheticOption != address(0x0), "ERR_NOT_DEPLOYED");
-
-        // Store in memory for gas savings.
-        address underlying = IOption(optionAddress).getUnderlyingTokenAddress();
-
-        // Get synthetic token from reserve.
-        ReserveData storage reserve = _reserves[underlying];
-
-        // Mint synthetic tokens to the synthetic option contract.
-        reserve.syntheticToken.mint(syntheticOption, quantity);
-
-        // Call mintOptions and send options to the receiver address.
-        IOption(syntheticOption).mintOptions(receiver);
-
-        // Pull real tokens to this contract.
-        _pullTokens(underlying, quantity);
-
-        emit SyntheticMinted(msg.sender, optionAddress, quantity);
-        return syntheticOption;
-    }
-
-    function syntheticExercise(
-        address optionAddress,
-        uint256 quantity,
-        address receiver
-    ) external {
-        address syntheticOption = syntheticOptions[optionAddress];
-        require(syntheticOption != address(0x0), "ERR_NOT_DEPLOYED");
-
-        // Store in memory for gas savings.
-        address underlying = IOption(optionAddress).getUnderlyingTokenAddress();
-        address strike = IOption(optionAddress).getStrikeTokenAddress();
-
-        // Move synthetic options from msg.sender to synthetic option contract itself.
-        IERC20(syntheticOption).safeTransferFrom(
-            msg.sender,
-            syntheticOption,
+        // Example, withdraws liquidity later and receives:
+        // ETH      2
+        // Short    6
+        //
+        // Need to determine how which tokens and how many to send back to depositor...
+        // Depositor originally deposited 4 ETH, with 2x leverage, a total of 8.
+        // so they are entitled to half the returned tokens.
+        //
+        // House currently has
+        // Long     4
+        //
+        // House needs to close its liability and clear its balance sheet
+        // LIABILITIES
+        // Long     4
+        // Short    4
+        // ETH      -2
+        // ----------
+        // AFTER BURNING
+        // ----------
+        // Long     0
+        // Short    0
+        // Short    6 (from LP) - 4 (Liability) = 2 Short
+        // ETH      2 (from LP) - 2 (Liability) = 0 ETH
+        //
+        // Lender
+        // ---------
+        // ETH      2
+        //
+        // Return 0 ETH and 2 Short to the original depositor.
+        // So we can take the sum of the outputs (assuming proportional), divide by 2, which gives us x. 8 / 2 = x.
+        // then we close x amount of options, and return amounts-x = remainder of tokens withdrawn from lp
+        // amountA - sum / 2 = remaining Short
+        // amountB - sum / 2 / 2 = remaining ETH
+        // amountA-4 = remaining short
+        // amountB-4/2 = remaining ETH (borrowed)
+        // amountA = 6, 6-4= 2 Short
+        // amountB = 2, 2 - 4/2 = 0 ETH
+        // mint virtual options to this contract.
+        // pulls quantity of underlying tokens from depositor.
+        // borrows quantity of underlying tokens from energy.
+        uint256 total = quantity.add(quantity);
+        _virtualMint(longOption, total, address(this));
+        _pullTokensFrom(
+            depositor,
+            IOption(longOpton).getUnderlyingTokenAddress(),
             quantity
         );
-
-        // Calculate strike tokens needed to exercise.
-        uint256 amountStrikeTokens = calculateStrikePayment(
-            optionAddress,
-            quantity
-        );
-
-        // Mint required strike tokens to the synthetic option in preparation of calling exerciseOptions().
-        _reserves[strike].syntheticToken.mint(
-            syntheticOption,
-            amountStrikeTokens
-        );
-
-        // Call exerciseOptions and send underlying tokens to this contract.
-        IOption(syntheticOption).exerciseOptions(
-            address(this),
-            quantity,
-            new bytes(0)
-        );
-
-        // Burn the synthetic underlying tokens.
-        _reserves[underlying].syntheticToken.burn(address(this), quantity);
-
-        // Push real underlying tokens to receiver.
-        IERC20(underlying).safeTransfer(receiver, quantity);
-
-        // Pull real strike tokens to this contract.
-        IERC20(strike).safeTransferFrom(
-            msg.sender,
-            address(this),
-            amountStrikeTokens
-        );
+        mEnergy.draw(address(this), quantity);
+        _doublePosition(depositor, longOption, total, router, params);
     }
-
-    function calculateStrikePayment(address optionAddress, uint256 quantity)
-        public
-        view
-        returns (uint256)
-    {
-        uint256 baseValue = IOption(optionAddress).getBaseValue();
-        uint256 quoteValue = IOption(optionAddress).getQuoteValue();
-
-        // Parameter `quantity` is in units of baseValue. Convert it into units of quoteValue.
-        uint256 calculatedValue = quantity.mul(quoteValue).div(baseValue);
-        return calculatedValue;
-    }
-
-    function _pullTokens(address token, uint256 quantity) internal {
-        IERC20(token).safeTransferFrom(msg.sender, address(this), quantity);
-    }
-
 }
-
-
