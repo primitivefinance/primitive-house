@@ -6,7 +6,6 @@ pragma solidity 0.6.2;
 /// @author  Primitive
 ///
 
-
 // Primitive
 import {
     IOption
@@ -20,13 +19,13 @@ import {IWETH} from "../interfaces/IWETH.sol";
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-library PrimitiveRouterLib {
+library RouterLib {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
 
     /**
-    * @dev    Calculates the proportional quantity of long option tokens per short option token.
-    * @notice For each long option token, there is quoteValue / baseValue quantity of short option tokens.
+     * @dev    Calculates the proportional quantity of long option tokens per short option token.
+     * @notice For each long option token, there is quoteValue / baseValue quantity of short option tokens.
      */
     function getProportionalLongOptions(
         IOption optionToken,
@@ -40,7 +39,7 @@ library PrimitiveRouterLib {
         return quantityLong;
     }
 
-    /** 
+    /**
      * @dev    Calculates the proportional quantity of short option tokens per long option token.
      * @notice For each short option token, there is baseValue / quoteValue quantity of long option tokens.
      */
@@ -60,7 +59,11 @@ library PrimitiveRouterLib {
      * @dev Deposits amount of ethers into WETH contract. Then sends WETH to "to".
      * @param to The address to send WETH ERC-20 tokens to.
      */
-    function safeTransferETHFromWETH(IWETH weth, address to, uint amount) internal {
+    function safeTransferETHFromWETH(
+        IWETH weth,
+        address to,
+        uint256 amount
+    ) internal {
         // Deposit the ethers received from amount into the WETH contract.
         weth.deposit.value(amount)();
 
@@ -73,7 +76,11 @@ library PrimitiveRouterLib {
      * @param to The address to send withdrawn ethers to.
      * @param amount The amount of WETH to unwrap.
      */
-    function safeTransferWETHToETH(IWETH weth, address to, uint256 amount) internal {
+    function safeTransferWETHToETH(
+        IWETH weth,
+        address to,
+        uint256 amount
+    ) internal {
         // Withdraw ethers with weth.
         weth.withdraw(amount);
         // Send ether.
@@ -81,5 +88,4 @@ library PrimitiveRouterLib {
         // Revert is call is unsuccessful.
         require(success, "PrimitiveV1: ERR_SENDING_ETHER");
     }
-
 }

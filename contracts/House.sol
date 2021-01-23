@@ -28,7 +28,7 @@ import {
     IUniswapV2Pair
 } from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
-import {ICapitol} from "./interfaces/ICapitol";
+import {ICapitol} from "./interfaces/ICapitol.sol";
 import {Virtualizer} from "./Virtualizer.sol";
 import {VirtualRouter} from "./VirtualRouter.sol";
 import {Accelerator} from "./Accelerator.sol";
@@ -37,6 +37,10 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
     using SafeERC20 for IERC20;
     using SafeERC20 for IOption;
     using SafeMath for uint256;
+
+    struct Account {
+        mapping(address => uint256) balanceOf;
+    }
 
     // liquidity
     event Leveraged(
@@ -47,8 +51,8 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
     );
     event CollateralDeposited(
         address indexed depositor,
-        address indexed pool,
-        uint256 liquidity
+        address[] indexed tokens,
+        uint256[] amounts
     );
     event CollateralWithdrawn(
         address indexed depositor,
@@ -68,7 +72,9 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
 
     ICapitol public capitol;
 
-    mapping(address => mapping(address => uint256)) public bank;
+    mapping(address => Account) public bank;
+    mapping(address => Account) public debit;
+    mapping(address => Account) public credit;
 
     // mutex
     bool private notEntered;
@@ -99,59 +105,120 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         capitol = ICapitol(capitol_);
     }
 
-    // ==== Collateral Management ====
+    // ==== Balance Sheet Accounting ====
 
-    function depositCollateral(
+    function addTokens(
         address depositor,
-        address pool,
-        uint256 liquidity
+        address[] memory tokens,
+        uint256[] memory amounts
     ) external returns (bool) {
-        return _depositCollateral(depositor, pool, liquidity);
+        Account storage account = credit[depositor];
+        uint256 tokensLength = tokens.length;
+        for (uint256 i = 0; i < tokensLength; i++) {
+            // Pull tokens from depositor.
+            address asset = tokens[i];
+            uint256 quantity = amounts[i];
+            IERC20(asset).safeTransferFrom(depositor, quantity);
+        }
+        return _addTokens(depositor, tokens, amounts, account);
     }
 
-    function _depositCollateral(
+    function _addTokens(
         address depositor,
-        address pool,
-        uint256 liquidity
+        address[] memory tokens,
+        uint256[] memory amounts,
+        Account storage account
     ) internal returns (bool) {
-        // Add liquidity to a depositor's respective pool balance.
-        bank[depositor][pool] = bank[depositor][pool].add(liquidity);
-        emit CollateralDeposited(depositor, pool, liquidity);
+        uint256 tokensLength = tokens.length;
+        uint256 amountsLength = amounts.length;
+        require(tokensLength == amountsLength, "House: PARAMETER_LENGTH");
+        for (uint256 i = 0; i < tokensLength; i++) {
+            // Add liquidity to a depositor's respective pool balance.
+            address asset = tokens[i];
+            uint256 quantity = amounts[i];
+            account.balanceOf[asset] = account.balanceOf[asset].add(quantity);
+        }
+        emit CollateralDeposited(depositor, tokens, amounts);
         return true;
     }
 
-    function withdrawCollatreral(
+    function removeTokens(
         address depositor,
-        address pool,
-        uint256 liquidity
+        address[] memory tokens,
+        uint256[] memory amounts
     ) external returns (bool) {
-        return _withdrawCollateral(depositor, pool, liquidity);
-    }
-
-    function _withdrawCollateral(
-        address depositor,
-        address pool,
-        uint256 liquidity
-    ) internal returns (bool) {
-        // Add liquidity to a depositor's respective pool balance.
-        bank[depositor][pool] = bank[depositor][pool].sub(liquidity);
-        emit CollateralWithdrawn(depositor, pool, liquidity);
+        Account storage account = credit[depositor];
+        // Remove balances from state.
+        _removeTokens(depositor, tokens, amounts, account);
+        uint256 tokensLength = tokens.length;
+        for (uint256 i = 0; i < tokensLength; i++) {
+            // Push tokens to depositor.
+            address asset = tokens[i];
+            uint256 quantity = amounts[i];
+            IERC20(asset).safeTransfer(depositor, quantity);
+        }
         return true;
     }
 
-    function collateralBalanceOf(address depositor, address pool)
+    function _removeTokens(
+        address depositor,
+        address[] memory tokens,
+        uint256[] memory amounts,
+        Account storage account
+    ) internal returns (bool) {
+        uint256 tokensLength = tokens.length;
+        uint256 amountsLength = amounts.length;
+        require(tokensLength == amountsLength, "House: PARAMETER_LENGTH");
+        for (uint256 i = 0; i < tokensLength; i++) {
+            // Remove liquidity to a depositor's respective pool balance.
+            address asset = tokens[i];
+            uint256 quantity = amounts[i];
+            account.balanceOf[asset] = account.balanceOf[asset].sub(quantity);
+        }
+        emit CollateralWithdrawn(depositor, tokens, amounts);
+        return true;
+    }
+
+    function collateralBalanceOf(address depositor, address tokens)
         public
         view
         returns (uint256)
     {
-        return bank[depositor][pool];
+        return bank[depositor][tokens];
     }
+
+    // ==== No leverage ====
 
     // ==== 2x leverage ====
 
     /**
-     * @dev     Pulls real underlying from
+     * @dev     Mints short option tokens virtually, to deposit them into the market.
      * @notice  Hold LP tokens as collateral, attribute to original depositor.
+     */
+    function doublePosition(
+        address depositor,
+        address longOption,
+        uint256 quantity,
+        address router,
+        bytes memory params
+    ) public {
+        // mint virtual options to this contract.
+        // pulls quantity of underlying tokens from depositor.
+        virtualMintFrom(depositor, longOption, quantity, address(this));
+        // add liquidity and store LP tokens, attribute to depositor.
+        _doublePosition(depositor, longOption, quantity, router, params);
+    }
+
+    /**
+     * @dev     Performs a low level call to the venue's desired contract with desired parameters.
+     * @notice  Sends virtual redeem tokens and real underlying tokens out to the called contract.
+     *          Stores LP tokens as collateral, attributed to original depositor.
+     *          Emits the "Leveraged" event.
+     * @param   depositor The address of the original caller whom is providing liquidity.
+     * @param   longOption The address of the long option token to provide liquidity to its virtual counter-part.
+     * @param   quantity The amount of real underlying tokens that will be sent from this contract to the pool.
+     * @param   router The contract performing the transfer between this contract and the core pool.
+     * @param   params The arguments specified to make the call, unknown abi to this contract.
      */
     function _doublePosition(
         address depositor,
@@ -163,7 +230,6 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         IOption virtualLong = IOption(virtualOptions[longOption]);
         // get the data to call to deposit into the respective venue's pool.
         // Example: UniswapVendor, the function we are calling with `params` is `addLiquidity`.
-        //assert(msg.sender == address(venue));
         address redeem = virtualLong.redeemToken(); // virtual version of the redeem
         address underlying = IOption(optionAddress).getUnderlyingTokenAddress(); // actual underlying
         // gets the pool's address (the lp token address) to apply it to the depositor's internal balance.
@@ -180,7 +246,13 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         (uint256 amountA, uint256 amountB, uint256 liquidity) =
             abi.decode(returnData, (uint256, uint256, uint256));
 
-        _depositCollateral(depositor, pool, liquidity);
+        address[] memory tokens = new address[](1);
+        tokens.push(pool);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts.push(liquidity);
+
+        _addTokens(depositor, tokens, amounts);
 
         // Final Balance Sheet
         //
@@ -198,22 +270,7 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         emit Leveraged(depositor, option, pool, quantity);
     }
 
-    /**
-     * @dev     Mints short option tokens virtualally, to deposit them into the market.
-     * @notice  Hold LP tokens as collateral, attribute to original depositor.
-     */
-    function doublePosition(
-        address depositor,
-        address longOption,
-        uint256 quantity,
-        address router,
-        bytes memory params
-    ) public {
-        // mint virtual options to this contract.
-        // pulls quantity of underlying tokens from depositor.
-        virtualMintFrom(depositor, longOption, quantity, address(this));
-        _doublePosition(depositor, longOption, quantity, router, params);
-    }
+    // ==== 2x Deleverage ====
 
     function doubleUnwind(
         address depositor,
@@ -235,8 +292,13 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         address pool = IVenue(msg.sender).pool(option);
         // get depositor balance of liquidity and then call withdraw() on venue
         uint256 liquidity = bank[depositor][pool];
+        address[] memory tokens = new address[](1);
+        tokens.push(pool);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts.push(liquidity);
         // update balance
-        _withdrawCollateral(depositor, pool, liquidity);
+        _removeTokens(depositor, tokens, amounts);
 
         // withdraw liquidity to get return tokens and their amounts back to this contract.
         //(address[] memory tokens, uint[] memory amounts) = IVenue(msg.sender).withdraw(liquidity);

@@ -8,15 +8,16 @@ pragma solidity >=0.6.2;
 import {
     IOption
 } from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
-import {PrimitiveRouterLib} from "./libraries/PrimitiveRouterLib.sol";
 import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
+import {Router} from "./Router.sol";
+import {RouterLib} from "./libraries/RouterLib.sol";
 
 // Libraries
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-contract VirtualRouter is IPrimitiveRouter {
+contract VirtualRouter is Router, IPrimitiveRouter {
     using SafeERC20 for IERC20;
     using SafeERC20 for IOption;
     using SafeMath for uint256;
@@ -102,10 +103,7 @@ contract VirtualRouter is IPrimitiveRouter {
             msg.sender,
             address(optionToken),
             mintQuantity,
-            PrimitiveRouterLib.getProportionalShortOptions(
-                optionToken,
-                mintQuantity
-            )
+            RouterLib.getProportionalShortOptions(optionToken, mintQuantity)
         );
         return virtualOption.mintOptions(receiver);
     }
@@ -125,7 +123,7 @@ contract VirtualRouter is IPrimitiveRouter {
         // Calculate quantity of strikeTokens needed to exercise quantity of optionTokens.
         address strikeToken = optionToken.getStrikeTokenAddress();
         uint256 inputStrikes =
-            PrimitiveRouterLib.getProportionalShortOptions(
+            RouterLib.getProportionalShortOptions(
                 optionToken,
                 exerciseQuantity
             );
@@ -202,10 +200,7 @@ contract VirtualRouter is IPrimitiveRouter {
     {
         // Calculate the quantity of redeemTokens that need to be burned. (What we mean by Implicit).
         uint256 inputRedeems =
-            PrimitiveRouterLib.getProportionalShortOptions(
-                optionToken,
-                closeQuantity
-            );
+            RouterLib.getProportionalShortOptions(optionToken, closeQuantity);
         IERC20(optionToken.redeemToken()).safeTransferFrom(
             msg.sender,
             address(optionToken),
@@ -240,7 +235,7 @@ contract VirtualRouter is IPrimitiveRouter {
         require(address(weth) == underlyingAddress, "ERR_NOT_WETH");
 
         // Convert ethers into WETH, then send WETH to option contract in preparation of calling mintOptions().
-        PrimitiveRouterLib.safeTransferETHFromWETH(
+        RouterLib.safeTransferETHFromWETH(
             weth,
             address(optionToken),
             msg.value
@@ -249,10 +244,7 @@ contract VirtualRouter is IPrimitiveRouter {
             msg.sender,
             address(optionToken),
             msg.value,
-            PrimitiveRouterLib.getProportionalShortOptions(
-                optionToken,
-                msg.value
-            )
+            RouterLib.getProportionalShortOptions(optionToken, msg.value)
         );
         return optionToken.mintOptions(receiver);
     }
@@ -283,13 +275,10 @@ contract VirtualRouter is IPrimitiveRouter {
         // The input strike quantity can be multiplied by the strike ratio to cancel out "quote" units.
         // 1 ether (quote units) * 300 (base units) / 1 (quote units) = 300 inputOptions
         uint256 inputOptions =
-            PrimitiveRouterLib.getProportionalLongOptions(
-                optionToken,
-                inputStrikes
-            );
+            RouterLib.getProportionalLongOptions(optionToken, inputStrikes);
 
         // Wrap the ethers into WETH, and send the WETH to the option contract to prepare for calling exerciseOptions().
-        PrimitiveRouterLib.safeTransferETHFromWETH(
+        RouterLib.safeTransferETHFromWETH(
             weth,
             address(optionToken),
             msg.value
@@ -329,11 +318,7 @@ contract VirtualRouter is IPrimitiveRouter {
             safeExercise(optionToken, exerciseQuantity, address(this));
 
         // Converts the withdrawn WETH to ethers, then sends the ethers to the receiver address.
-        PrimitiveRouterLib.safeTransferWETHToETH(
-            weth,
-            receiver,
-            exerciseQuantity
-        );
+        RouterLib.safeTransferWETHToETH(weth, receiver, exerciseQuantity);
         return (inputStrikes, inputOptions);
     }
 
@@ -356,11 +341,7 @@ contract VirtualRouter is IPrimitiveRouter {
         uint256 inputRedeems =
             safeRedeem(optionToken, redeemQuantity, address(this));
         // Unwrap the redeemed WETH and then send the ethers to the receiver.
-        PrimitiveRouterLib.safeTransferWETHToETH(
-            weth,
-            receiver,
-            redeemQuantity
-        );
+        RouterLib.safeTransferWETHToETH(weth, receiver, redeemQuantity);
         return inputRedeems;
     }
 
@@ -391,7 +372,7 @@ contract VirtualRouter is IPrimitiveRouter {
             safeClose(optionToken, closeQuantity, address(this));
 
         // Since underlyngTokens are WETH, unwrap them then send the ethers to the receiver.
-        PrimitiveRouterLib.safeTransferWETHToETH(weth, receiver, closeQuantity);
+        RouterLib.safeTransferWETHToETH(weth, receiver, closeQuantity);
         return (inputRedeems, inputOptions, outUnderlyings);
     }
 
