@@ -6,34 +6,38 @@ pragma solidity >=0.6.2;
  * @author  Primitive
  */
 
+// Open Zeppelin
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {SafeMath} from "./libraries/SafeMath.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
+
+// Primitive
 import {
     IOption
 } from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
-import {ISERC20} from "./interfaces/ISERC20.sol";
-import {IVenue} from "./interfaces/IVenue.sol";
-// WETH Interface
-import {IWETH} from "./interfaces/IWETH.sol";
-import {PrimitiveRouterLib} from "./libraries/PrimitiveRouterLib.sol";
-import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
 
-// Uni
-import {
-    IUniswapV2Callee
-} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Callee.sol";
-import {
-    IUniswapV2Pair
-} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-
+// Internal
+import {Accelerator} from "./extensions/Accelerator.sol";
 import {ICapitol} from "./interfaces/ICapitol.sol";
+import {IERC20} from "./interfaces/IPrimitiveERC20.sol";
+import {IVERC20} from "./interfaces/IVERC20.sol";
+import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
+import {IVenue} from "./interfaces/IVenue.sol";
+import {IWETH} from "./interfaces/IWETH.sol";
+import {RouterLib} from "./libraries/RouterLib.sol";
+import {SafeMath} from "./libraries/SafeMath.sol";
 import {Virtualizer} from "./Virtualizer.sol";
 import {VirtualRouter} from "./VirtualRouter.sol";
-import {Accelerator} from "./Accelerator.sol";
 
-contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
+contract House is
+    Ownable,
+    Accelerator,
+    Virtualizer,
+    VirtualRouter,
+    ReentrancyGuard
+{
     using SafeERC20 for IERC20;
     using SafeERC20 for IOption;
     using SafeMath for uint256;
@@ -49,6 +53,12 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         address indexed pool,
         uint256 quantity
     );
+    event Deleveraged(
+        address indexed from,
+        address indexed optionAddress,
+        uint256 liquidity
+    );
+
     event CollateralDeposited(
         address indexed depositor,
         address[] indexed tokens,
@@ -59,32 +69,12 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         address indexed pool,
         uint256 liquidity
     );
-    event Collateralized(
-        address indexed from,
-        address indexed optionAddress,
-        uint256 liquidity
-    );
-    event Deleveraged(
-        address indexed from,
-        address indexed optionAddress,
-        uint256 liquidity
-    );
 
     ICapitol public capitol;
 
     mapping(address => Account) public bank;
     mapping(address => Account) public debit;
     mapping(address => Account) public credit;
-
-    // mutex
-    bool private notEntered;
-
-    modifier nonReentrant() {
-        require(notEntered == 1, "PrimitiveHouse: NON_REENTRANT");
-        notEntered = true;
-        _;
-        notEntered = false;
-    }
 
     /// @dev Checks the quantity of an operation to make sure its not zero. Fails early.
     modifier nonZero(uint256 quantity) {
@@ -179,12 +169,30 @@ contract House is Ownable, Accelerator, Virtualizer, VirtualRouter {
         return true;
     }
 
-    function collateralBalanceOf(address depositor, address tokens)
+    function creditBalanceOf(address depositor, address token)
         public
         view
         returns (uint256)
     {
-        return bank[depositor][tokens];
+        Account memory account = credit[depositor];
+        return balanceOf(account, token);
+    }
+
+    function debitBalanceOf(address depositor, address token)
+        public
+        view
+        returns (uint256)
+    {
+        Account memory account = debit[depositor];
+        return balanceOf(account, token);
+    }
+
+    function balanceOf(Account memory account, address token)
+        public
+        view
+        returns (uint256)
+    {
+        return account.balanceOf[token];
     }
 
     // ==== No leverage ====

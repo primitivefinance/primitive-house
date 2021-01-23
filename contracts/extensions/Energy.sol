@@ -4,7 +4,7 @@ pragma solidity >=0.6.2;
  * @title Primitive Energy -> Capital storage for internal network use.
  */
 
-import {IEnergy} from "./interfaces/IEnergy.sol";
+import {IEnergy} from "../interfaces/IEnergy.sol";
 
 contract Energy is IEnergy {
     constructor() public {}

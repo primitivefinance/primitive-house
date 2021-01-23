@@ -1,15 +1,30 @@
 pragma solidity >=0.6.2;
 
+// Open Zeppelin
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {
-    IUniswapConnector03,
-    IUniswapV2Factory
-} from "@primitivefi/v1-connectors/contracts/interfaces/IUniswapConnector03.sol";
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+
+// Primitive
+import {
+    IUniswapVenue,
+    IUniswapV2Router02,
+    IUniswapV2Factory,
+    IOption,
+    IERC20
+} from "../interfaces/IUniswapVenue.sol";
+
+// Internal
+import {SafeMath} from "../libraries/SafeMath.sol";
+import {UniswapVenueLib} from "../libraries/UniswapVenueLib.sol";
 import {Venue} from "../Venue.sol";
 import {VirtualRouter} from "../VirtualRouter.sol";
-import {UniswapVenueLib} from "../libraries/UniswapVenueLib.sol";
 
-contract UniswapVenue is Venue, VirtualRouter {
-    bytes4 internal constant ADD_LIQUIDITY = 0x2e16cab3;
+contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
+    using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
+    using SafeMath for uint256; // Reverts on math underflows/overflows
 
     IUniswapV2Factory public override factory =
         IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f); // The Uniswap V2 factory contract to get pair addresses from
@@ -21,8 +36,12 @@ contract UniswapVenue is Venue, VirtualRouter {
     ICapitol public capitol;
 
     event Initialized(address indexed from); // Emmitted on deployment
-    event FlashOpened(address indexed from, uint256 quantity, uint256 premium); // Emmitted on flash opening a long position
-    event FlashClosed(address indexed from, uint256 quantity, uint256 payout);
+    event BoughtOptions(
+        address indexed from,
+        uint256 quantity,
+        uint256 premium
+    ); // Emmitted on flash opening a long position
+    event SoldOptions(address indexed from, uint256 quantity, uint256 payout);
     event WroteOption(address indexed from, uint256 quantity);
 
     /// @dev Checks the quantity of an operation to make sure its not zero. Fails early.
@@ -238,26 +257,10 @@ contract UniswapVenue is Venue, VirtualRouter {
     /**
      * @dev    Write options by minting option tokens and selling the long option tokens for premium.
      * @notice IMPORTANT: if `minPayout` is 0, this function can cost the caller `underlyingToken`s.
-     * @param optionToken The option contract to underwrite.
-     * @param writeQuantity The quantity of option tokens to write and equally, the quantity of underlyings to deposit.
-     * @param minPayout The minimum amount of underlyingTokens to receive from selling long option tokens.
+     * @param options The option contract to underwrite.
+     * @param quantities The quantity of option tokens to write and equally, the quantity of underlyings to deposit.
+     * @param minAmounts The minimum amount of underlyingTokens to receive from selling long option tokens.
      */
-    /* function mintOptionsThenFlashCloseLong(
-        IOption optionToken,
-        uint256 writeQuantity,
-        uint256 minPayout
-    ) external returns (bool) {
-        // Pulls underlyingTokens from `msg.sender` using `transferFrom`. Mints option tokens to `msg.sender`.
-        (, uint256 outputRedeems) =
-            safeMint(optionToken, writeQuantity, msg.sender);
-
-        // Sell the long option tokens for underlyingToken premium.
-        bool success = closeFlashLong(optionToken, outputRedeems, minPayout);
-        require(success, "ERR_FLASH_CLOSE");
-        emit WroteOption(msg.sender, writeQuantity);
-        return success;
-    } */
-
     function writeOptions(
         IOption[] memory options,
         uint256[] memory quantities,
@@ -319,35 +322,10 @@ contract UniswapVenue is Venue, VirtualRouter {
      * @dev    Opens a longOptionToken position by minting long + short tokens, then selling the short tokens.
      * @notice IMPORTANT: amountOutMin parameter is the price to swap shortOptionTokens to underlyingTokens.
      *         IMPORTANT: If the ratio between shortOptionTokens and underlyingTokens is 1:1, then only the swap fee (0.30%) has to be paid.
-     * @param optionToken The option address.
-     * @param amountOptions The quantity of longOptionTokens to purchase.
-     * @param maxPremium The maximum quantity of underlyingTokens to pay for the optionTokens.
+     * @param options The option address.
+     * @param quantities The quantity of longOptionTokens to purchase.
+     * @param maxAmounts The maximum quantity of underlyingTokens to pay for the optionTokens.
      */
-    /* function openFlashLong(
-        IOption optionToken,
-        uint256 amountOptions,
-        uint256 maxPremium
-    ) public override nonReentrant returns (bool) {
-        bytes4 selector =
-            bytes4(
-                keccak256(
-                    bytes(
-                        "flashMintShortOptionsThenSwap(address,uint256,uint256,address)"
-                    )
-                )
-            );
-        bytes memory params =
-            abi.encodeWithSelector(
-                selector, // function to call in this contract
-                optionToken, // option token to mint with flash loaned tokens
-                amountOptions, // quantity of underlyingTokens from flash loan to use to mint options
-                maxPremium, // total price paid (in underlyingTokens) for selling shortOptionTokens
-                msg.sender // address to pull the remainder loan amount to pay, and send longOptionTokens to.
-            );
-        _swapForUnderlying(optionToken, amountOptions, params);
-        return true;
-    } */
-
     function swapFromUnderlyingToOptions(
         IOption[] memory options,
         uint256[] memory quantities,
@@ -391,36 +369,10 @@ contract UniswapVenue is Venue, VirtualRouter {
      * @dev    Opens a longOptionToken position by minting long + short tokens, then selling the short tokens.
      * @notice IMPORTANT: amountOutMin parameter is the price to swap shortOptionTokens to underlyingTokens.
      *         IMPORTANT: If the ratio between shortOptionTokens and underlyingTokens is 1:1, then only the swap fee (0.30%) has to be paid.
-     * @param optionToken The option address.
-     * @param amountOptions The quantity of longOptionTokens to purchase.
-     * @param maxPremium The maximum quantity of underlyingTokens to pay for the optionTokens.
+     * @param options The option address.
+     * @param quantities The quantity of longOptionTokens to purchase.
+     * @param maxAmounts The maximum quantity of underlyingTokens to pay for the optionTokens.
      */
-    /* function openFlashLongWithETH(
-        IOption optionToken,
-        uint256 amountOptions,
-        uint256 maxPremium
-    ) external payable nonZero(msg.value) returns (bool) {
-        require(maxPremium == msg.value, "PrimitiveV1: ERR_ETH_PREMIUM"); // must assert because cannot check in callback
-        bytes4 selector =
-            bytes4(
-                keccak256(
-                    bytes(
-                        "flashMintShortOptionsThenSwapWithETH(address,uint256,uint256,address)"
-                    )
-                )
-            );
-        bytes memory params =
-            abi.encodeWithSelector(
-                selector, // function to call in this contract
-                optionToken, // option token to mint with flash loaned tokens
-                amountOptions, // quantity of underlyingTokens from flash loan to use to mint options
-                maxPremium, // total price paid (in underlyingTokens) for selling shortOptionTokens
-                msg.sender // address to pull the remainder loan amount to pay, and send longOptionTokens to.
-            );
-        _swapForUnderlying(optionToken, amountOptions, params);
-        return true;
-    } */
-
     function swapFromETHToOptions(
         IOption[] memory options,
         uint256[] memory quantities,
@@ -473,35 +425,10 @@ contract UniswapVenue is Venue, VirtualRouter {
      * @dev    Closes a longOptionToken position by flash swapping in redeemTokens,
      *         closing the option, and paying back in underlyingTokens.
      * @notice IMPORTANT: If minPayout is 0, this function will cost the caller to close the option, for no gain.
-     * @param optionToken The address of the longOptionTokens to close.
-     * @param amountRedeems The quantity of redeemTokens to borrow to close the options.
-     * @param minPayout The minimum payout of underlyingTokens sent out to the user.
+     * @param options The address of the longOptionTokens to close.
+     * @param quantities The quantity of redeemTokens to borrow to close the options.
+     * @param minAmounts The minimum payout of underlyingTokens sent out to the user.
      */
-    /* function closeFlashLong(
-        IOption optionToken,
-        uint256 amountRedeems,
-        uint256 minPayout
-    ) public override nonReentrant returns (bool) {
-        bytes4 selector =
-            bytes4(
-                keccak256(
-                    bytes(
-                        "flashCloseLongOptionsThenSwap(address,uint256,uint256,address)"
-                    )
-                )
-            );
-        bytes memory params =
-            abi.encodeWithSelector(
-                selector, // function to call in this contract
-                optionToken, // option token to close with flash loaned redeemTokens
-                amountRedeems, // quantity of redeemTokens from flash loan to use to close options
-                minPayout, // total remaining underlyingTokens after flash loan is paid
-                msg.sender // address to send payout of underlyingTokens to. Will pull underlyingTokens if negative payout and minPayout <= 0.
-            );
-        _swapForRedeem(optionToken, amountRedeems, params);
-        return true;
-    } */
-
     function swapFromOptionsToUnderlying(
         IOption[] memory options,
         uint256[] memory quantities,
@@ -545,35 +472,10 @@ contract UniswapVenue is Venue, VirtualRouter {
      * @dev    Closes a longOptionToken position by flash swapping in redeemTokens,
      *         closing the option, and paying back in underlyingTokens.
      * @notice IMPORTANT: If minPayout is 0, this function will cost the caller to close the option, for no gain.
-     * @param optionToken The address of the longOptionTokens to close.
-     * @param amountRedeems The quantity of redeemTokens to borrow to close the options.
-     * @param minPayout The minimum payout of underlyingTokens sent out to the user.
+     * @param options The address of the longOptionTokens to close.
+     * @param quantities The quantity of redeemTokens to borrow to close the options.
+     * @param minAmounts The minimum payout of underlyingTokens sent out to the user.
      */
-    /* function closeFlashLongForETH(
-        IOption optionToken,
-        uint256 amountRedeems,
-        uint256 minPayout
-    ) public nonReentrant returns (bool) {
-        bytes4 selector =
-            bytes4(
-                keccak256(
-                    bytes(
-                        "flashCloseLongOptionsThenSwapForETH(address,uint256,uint256,address)"
-                    )
-                )
-            );
-        bytes memory params =
-            abi.encodeWithSelector(
-                selector, // function to call in this contract
-                optionToken, // option token to close with flash loaned redeemTokens
-                amountRedeems, // quantity of redeemTokens from flash loan to use to close options
-                minPayout, // total remaining underlyingTokens after flash loan is paid
-                msg.sender // address to send payout of underlyingTokens to. Will pull underlyingTokens if negative payout and minPayout <= 0.
-            );
-        _swapForRedeem(optionToken, amountRedeems, params);
-        return true;
-    } */
-
     function swapFromOptionsToETH(
         IOption[] calldata options,
         uint256[] calldata quantities,
@@ -1138,7 +1040,7 @@ contract UniswapVenue is Venue, VirtualRouter {
 
         // Send minted longOptionTokens (option) to the original msg.sender.
         IERC20(optionAddress).safeTransfer(to, flashLoanQuantity);
-        emit FlashOpened(msg.sender, flashLoanQuantity, loanRemainder);
+        emit BoughtOptions(msg.sender, flashLoanQuantity, loanRemainder);
         return loanRemainder;
     }
 
@@ -1322,7 +1224,7 @@ contract UniswapVenue is Venue, VirtualRouter {
             );
         }
 
-        emit FlashClosed(msg.sender, outputUnderlyings, underlyingPayout);
+        emit SoldOptions(msg.sender, outputUnderlyings, underlyingPayout);
         return (outputUnderlyings, underlyingPayout);
     }
 

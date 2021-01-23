@@ -4,7 +4,7 @@ pragma solidity >=0.6.2;
  * @title Primitive Accelerator -> Leverage booster using internal capital system: Energy.
  */
 
-import {IEnergy} from "./interfaces/IEnergy.sol";
+import {IEnergy} from "../interfaces/IEnergy.sol";
 
 contract Accelerator {
     IEnergy public energy;
