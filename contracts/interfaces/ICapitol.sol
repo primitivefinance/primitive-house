@@ -5,8 +5,8 @@ import {IVenue} from "./IVenue.sol";
 interface ICapitol {
     function addVenue(
         address venue_,
-        string memory name,
-        string memory apiVersion,
+        string calldata name,
+        string calldata apiVersion,
         bool isEndorsed
     ) external;
 
@@ -25,5 +25,5 @@ interface ICapitol {
             bool
         );
 
-    function allVenues() external returns (IVenue[] calldata);
+    //function allVenues() external returns (IVenue[] memory);
 }

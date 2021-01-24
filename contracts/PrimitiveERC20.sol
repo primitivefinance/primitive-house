@@ -1,4 +1,4 @@
-pragma solidity >=0.7.0;
+pragma solidity >=0.6.2;
 
 /**
  * @title The Primitive ERC20 base token.
@@ -11,9 +11,9 @@ import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
 contract PrimitiveERC20 is IPrimitiveERC20 {
     using SafeMath for uint256;
 
-    string public constant override name = "Primitive V1";
-    string public constant override symbol = "PRM-V1";
-    uint8 public constant override decimals = 18;
+    string public constant name = "Primitive V1";
+    string public constant symbol = "PRM-V1";
+    uint8 public constant decimals = 18;
     uint256 public override totalSupply;
     mapping(address => uint256) public override balanceOf;
     mapping(address => mapping(address => uint256)) public override allowance;

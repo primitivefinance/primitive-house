@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.6.2;
+pragma solidity >=0.6.2;
 
 import {
     IUniswapV2Router02
@@ -29,53 +29,15 @@ interface IUniswapVenue {
         address to
     ) external returns (uint256, uint256);
 
-    function openFlashLong(
-        IOption optionToken,
-        uint256 amountOptions,
-        uint256 amountOutMin
-    ) external returns (bool);
-
-    function closeFlashLong(
-        IOption optionToken,
-        uint256 amountRedeems,
-        uint256 minPayout
-    ) external returns (bool);
-
-    // ==== Liquidity Functions ====
-
-    function addShortLiquidityWithUnderlying(
-        address optionAddress,
-        uint256 quantityOptions,
-        uint256 amountBMax,
-        uint256 amountBMin,
-        address to,
-        uint256 deadline
-    )
-        external
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
-
-    function removeShortLiquidityThenCloseOptions(
-        address optionAddress,
-        uint256 liquidity,
-        uint256 amountAMin,
-        uint256 amountBMin,
-        address to,
-        uint256 deadline
-    ) external returns (uint256, uint256);
-
     // ==== View ====
 
     function router() external view returns (IUniswapV2Router02);
 
     function factory() external view returns (IUniswapV2Factory);
 
-    function getName() external pure returns (string memory);
+    function getName() external view returns (string memory);
 
-    function getVersion() external pure returns (uint8);
+    function getVersion() external view returns (string memory);
 
     function getOpenPremium(IOption optionToken, uint256 quantityLong)
         external
@@ -86,4 +48,11 @@ interface IUniswapVenue {
         external
         view
         returns (uint256, uint256);
+
+    function uniswapV2Call(
+        address sender,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata data
+    ) external;
 }

@@ -11,7 +11,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {
     ReentrancyGuard
 } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+/* import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol"; */
 
 // Primitive
 import {
@@ -21,25 +21,17 @@ import {
 // Internal
 import {Accelerator} from "./extensions/Accelerator.sol";
 import {ICapitol} from "./interfaces/ICapitol.sol";
-import {IERC20} from "./interfaces/IPrimitiveERC20.sol";
+import {IERC20} from "./interfaces/IERC20.sol";
 import {IVERC20} from "./interfaces/IVERC20.sol";
 import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
 import {IVenue} from "./interfaces/IVenue.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {RouterLib} from "./libraries/RouterLib.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
-import {Virtualizer} from "./Virtualizer.sol";
 import {VirtualRouter} from "./VirtualRouter.sol";
 
-contract House is
-    Ownable,
-    Accelerator,
-    Virtualizer,
-    VirtualRouter,
-    ReentrancyGuard
-{
-    using SafeERC20 for IERC20;
-    using SafeERC20 for IOption;
+contract House is VirtualRouter, Accelerator {
+    /* using SafeERC20 for IERC20; */
     using SafeMath for uint256;
 
     struct Account {
@@ -66,21 +58,14 @@ contract House is
     );
     event CollateralWithdrawn(
         address indexed depositor,
-        address indexed pool,
-        uint256 liquidity
+        address[] indexed tokens,
+        uint256[] amounts
     );
 
     ICapitol public capitol;
 
-    mapping(address => Account) public bank;
-    mapping(address => Account) public debit;
-    mapping(address => Account) public credit;
-
-    /// @dev Checks the quantity of an operation to make sure its not zero. Fails early.
-    modifier nonZero(uint256 quantity) {
-        require(quantity > 0, "ERR_ZERO");
-        _;
-    }
+    mapping(address => mapping(address => uint256)) public debit;
+    mapping(address => mapping(address => uint256)) public credit;
 
     modifier isEndorsed(address venue_) {
         require(capitol.getIsEndorsed(venue_), "House: NOT_ENDORSED");
@@ -89,9 +74,10 @@ contract House is
 
     constructor(
         address weth_,
+        address registry_,
         address energy_,
         address capitol_
-    ) public VirtualRouter(weth_) Accelerator(energy_) {
+    ) public VirtualRouter(weth_, registry_) Accelerator(energy_) {
         capitol = ICapitol(capitol_);
     }
 
@@ -101,23 +87,22 @@ contract House is
         address depositor,
         address[] memory tokens,
         uint256[] memory amounts
-    ) external returns (bool) {
-        Account storage account = credit[depositor];
+    ) public returns (bool) {
         uint256 tokensLength = tokens.length;
         for (uint256 i = 0; i < tokensLength; i++) {
             // Pull tokens from depositor.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
-            IERC20(asset).safeTransferFrom(depositor, quantity);
+            IERC20(asset).transferFrom(depositor, address(this), quantity);
         }
-        return _addTokens(depositor, tokens, amounts, account);
+        return _addTokens(depositor, tokens, amounts, false);
     }
 
     function _addTokens(
         address depositor,
         address[] memory tokens,
         uint256[] memory amounts,
-        Account storage account
+        bool isDebit
     ) internal returns (bool) {
         uint256 tokensLength = tokens.length;
         uint256 amountsLength = amounts.length;
@@ -126,7 +111,13 @@ contract House is
             // Add liquidity to a depositor's respective pool balance.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
-            account.balanceOf[asset] = account.balanceOf[asset].add(quantity);
+            if (isDebit) {
+                debit[asset][depositor] = debit[asset][depositor].add(quantity);
+            } else {
+                credit[asset][depositor] = credit[asset][depositor].add(
+                    quantity
+                );
+            }
         }
         emit CollateralDeposited(depositor, tokens, amounts);
         return true;
@@ -136,16 +127,15 @@ contract House is
         address depositor,
         address[] memory tokens,
         uint256[] memory amounts
-    ) external returns (bool) {
-        Account storage account = credit[depositor];
+    ) public returns (bool) {
         // Remove balances from state.
-        _removeTokens(depositor, tokens, amounts, account);
+        _removeTokens(depositor, tokens, amounts, true);
         uint256 tokensLength = tokens.length;
         for (uint256 i = 0; i < tokensLength; i++) {
             // Push tokens to depositor.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
-            IERC20(asset).safeTransfer(depositor, quantity);
+            IERC20(asset).transfer(depositor, quantity);
         }
         return true;
     }
@@ -154,7 +144,7 @@ contract House is
         address depositor,
         address[] memory tokens,
         uint256[] memory amounts,
-        Account storage account
+        bool isDebit
     ) internal returns (bool) {
         uint256 tokensLength = tokens.length;
         uint256 amountsLength = amounts.length;
@@ -163,7 +153,13 @@ contract House is
             // Remove liquidity to a depositor's respective pool balance.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
-            account.balanceOf[asset] = account.balanceOf[asset].sub(quantity);
+            if (isDebit) {
+                debit[asset][depositor] = debit[asset][depositor].sub(quantity);
+            } else {
+                credit[asset][depositor] = credit[asset][depositor].sub(
+                    quantity
+                );
+            }
         }
         emit CollateralWithdrawn(depositor, tokens, amounts);
         return true;
@@ -174,8 +170,7 @@ contract House is
         view
         returns (uint256)
     {
-        Account memory account = credit[depositor];
-        return balanceOf(account, token);
+        return credit[token][depositor];
     }
 
     function debitBalanceOf(address depositor, address token)
@@ -183,16 +178,7 @@ contract House is
         view
         returns (uint256)
     {
-        Account memory account = debit[depositor];
-        return balanceOf(account, token);
-    }
-
-    function balanceOf(Account memory account, address token)
-        public
-        view
-        returns (uint256)
-    {
-        return account.balanceOf[token];
+        return debit[token][depositor];
     }
 
     // ==== No leverage ====
@@ -239,11 +225,11 @@ contract House is
         // get the data to call to deposit into the respective venue's pool.
         // Example: UniswapVendor, the function we are calling with `params` is `addLiquidity`.
         address redeem = virtualLong.redeemToken(); // virtual version of the redeem
-        address underlying = IOption(optionAddress).getUnderlyingTokenAddress(); // actual underlying
+        address underlying = IOption(longOption).getUnderlyingTokenAddress(); // actual underlying
         // gets the pool's address (the lp token address) to apply it to the depositor's internal balance.
         address pool = IVenue(msg.sender).pool(longOption);
-        IERC20(redeem).approve(address(router), type(uint256).max); // approves the router to transferFrom this redeem
-        IERC20(underlying).approve(address(router), type(uint256).max); // approves the router to transferFrom this underlying
+        IERC20(redeem).approve(address(router), uint256(-1)); // approves the router to transferFrom this redeem
+        IERC20(underlying).approve(address(router), uint256(-1)); // approves the router to transferFrom this underlying
 
         // this call will pull the underlyingTokens received from the virtual mint,
         // and the short options which were virtualally minted.
@@ -255,12 +241,12 @@ contract House is
             abi.decode(returnData, (uint256, uint256, uint256));
 
         address[] memory tokens = new address[](1);
-        tokens.push(pool);
+        tokens[0] = pool;
 
         uint256[] memory amounts = new uint256[](1);
-        amounts.push(liquidity);
+        amounts[0] = liquidity;
 
-        _addTokens(depositor, tokens, amounts);
+        /* _addTokens(depositor, tokens, amounts, true);
 
         // Final Balance Sheet
         //
@@ -275,7 +261,7 @@ contract House is
         // Depositor
         // liquidity# of lp tokens held in this contract
 
-        emit Leveraged(depositor, option, pool, quantity);
+        emit Leveraged(depositor, address(virtualLong), pool, quantity); */
     }
 
     // ==== 2x Deleverage ====
@@ -299,14 +285,14 @@ contract House is
     ) internal isEndorsed(msg.sender) {
         address pool = IVenue(msg.sender).pool(option);
         // get depositor balance of liquidity and then call withdraw() on venue
-        uint256 liquidity = bank[depositor][pool];
+        uint256 liquidity = 1; //bank[depositor][pool];
         address[] memory tokens = new address[](1);
-        tokens.push(pool);
+        tokens[0] = pool;
 
-        uint256[] memory amounts = new uint256[](1);
-        amounts.push(liquidity);
+        uint256[] memory quantities = new uint256[](1);
+        quantities[0] = liquidity;
         // update balance
-        _removeTokens(depositor, tokens, amounts);
+        _removeTokens(depositor, tokens, quantities, false);
 
         // withdraw liquidity to get return tokens and their amounts back to this contract.
         //(address[] memory tokens, uint[] memory amounts) = IVenue(msg.sender).withdraw(liquidity);
@@ -315,7 +301,7 @@ contract House is
         // After burning lp tokens, released tokens of the pair will be returned here.
         (bool success, bytes memory returnData) = router.call(params);
         require(success, "ERR_POOL_WITHDRAW_FAIL");
-        uint256[] memory amounts = abi.decode(returnData, (uint256[2]));
+        uint256[] memory amounts = abi.decode(returnData, (uint256[]));
 
         // example:
         // ETH      1
@@ -340,7 +326,7 @@ contract House is
         // So we can take the sum of the outputs (assuming proportional), divide by 2, which gives us x
         // then we close x amount of options, and return amounts-x = remainder of tokens withdrawn from lp
         // Get virtual token from reserve.
-        address virtualOption = virtualOptions[option];
+        /* address virtualOption = virtualOptions[option];
         address redeem = IOption(option).redeemToken();
         address underlying = IOption(option).getUnderlyingTokenAddress();
         ReserveData memory reserve = _reserves[redeem];
@@ -361,7 +347,7 @@ contract House is
         // Get virtual token from reserve.
         ReserveData memory reserveU = _reserves[underlying];
         // Burn virtual tokens from this contract.
-        reserveU.virtualToken.burn(address(this), assetAmt);
+        reserveU.virtualToken.burn(address(this), x); // fix x
 
         // return the assets
         // if original sum was 4, 1 ETH + 3 Short, then 4/2 = 2 Short were burned.
@@ -371,7 +357,7 @@ contract House is
         // amountB = 1, 2 - 2/2 = 1 ETH
         IERC20(underlying).transfer(depositor, x.div(2));
         IERC20(virtualRedeem).transfer(depositor, x.div(2));
-        emit Deleveraged(depositor, option, liquidity);
+        emit Deleveraged(depositor, option, liquidity); */
     }
 
     // ==== 4x leverage ====
@@ -432,10 +418,10 @@ contract House is
         _virtualMint(longOption, total, address(this));
         _pullTokensFrom(
             depositor,
-            IOption(longOpton).getUnderlyingTokenAddress(),
+            IOption(longOption).getUnderlyingTokenAddress(),
             quantity
         );
-        mEnergy.draw(address(this), quantity);
+        energy.draw(address(this), quantity);
         _doublePosition(depositor, longOption, total, router, params);
     }
 }

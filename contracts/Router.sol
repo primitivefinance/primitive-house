@@ -5,47 +5,50 @@ import {
     IOption,
     IERC20
 } from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 abstract contract Router {
     function safeMint(
         IOption optionToken,
         uint256 mintQuantity,
         address receiver
-    ) external returns (uint256, uint256);
+    ) external virtual returns (uint256, uint256);
 
     function safeMintWithETH(IOption optionToken, address receiver)
         external
         payable
+        virtual
         returns (uint256, uint256);
 
     function safeExercise(
         IOption optionToken,
         uint256 exerciseQuantity,
         address receiver
-    ) external returns (uint256, uint256);
+    ) external virtual returns (uint256, uint256);
 
     function safeExerciseWithETH(IOption optionToken, address receiver)
         external
         payable
+        virtual
         returns (uint256, uint256);
 
     function safeExerciseForETH(
         IOption optionToken,
         uint256 exerciseQuantity,
         address receiver
-    ) external returns (uint256, uint256);
+    ) external virtual returns (uint256, uint256);
 
     function safeRedeem(
         IOption optionToken,
         uint256 redeemQuantity,
         address receiver
-    ) external returns (uint256);
+    ) external virtual returns (uint256);
 
     function safeRedeemForETH(
         IOption optionToken,
         uint256 redeemQuantity,
         address receiver
-    ) external returns (uint256);
+    ) external virtual returns (uint256);
 
     function safeClose(
         IOption optionToken,
@@ -53,6 +56,7 @@ abstract contract Router {
         address receiver
     )
         external
+        virtual
         returns (
             uint256,
             uint256,
@@ -65,6 +69,7 @@ abstract contract Router {
         address receiver
     )
         external
+        virtual
         returns (
             uint256,
             uint256,
@@ -77,6 +82,7 @@ abstract contract Router {
         address receiver
     )
         external
+        virtual
         returns (
             uint256,
             uint256,

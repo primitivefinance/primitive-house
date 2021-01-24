@@ -1,0 +1,90 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "Energy",
+  "sourceName": "contracts/extensions/Energy.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "credit",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "debit",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "receiver",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "draw",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "receiver",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "erase",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x608060405234801561001057600080fd5b5060cf8061001f6000396000f3fe6080604052348015600f57600080fd5b506004361060465760003560e01c806317c4674a14604b5780634a03707c14604b5780639c8fa9ca146086578063a06d083c146086575b600080fd5b607460048036036040811015605f57600080fd5b506001600160a01b038135169060200135608c565b60408051918252519081900360200190f35b60746094565b600192915050565b60019056fea2646970667358221220b12fe3d2d3611bb1299c04e38c0db9f51d71bc9798bdbc0161fa2889e049ca0c64736f6c63430006020033",
+  "deployedBytecode": "0x6080604052348015600f57600080fd5b506004361060465760003560e01c806317c4674a14604b5780634a03707c14604b5780639c8fa9ca146086578063a06d083c146086575b600080fd5b607460048036036040811015605f57600080fd5b506001600160a01b038135169060200135608c565b60408051918252519081900360200190f35b60746094565b600192915050565b60019056fea2646970667358221220b12fe3d2d3611bb1299c04e38c0db9f51d71bc9798bdbc0161fa2889e049ca0c64736f6c63430006020033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

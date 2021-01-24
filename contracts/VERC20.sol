@@ -1,4 +1,4 @@
-pragma solidity >=0.5.12 <=0.6.2;
+pragma solidity >=0.5.12;
 
 import {IVERC20} from "./interfaces/IVERC20.sol";
 import {IHouse} from "./interfaces/IHouse.sol";
@@ -10,23 +10,14 @@ contract VERC20 is PrimitiveERC20, IVERC20 {
 
     string private _name;
     string private _symbol;
-    uint256 public constant decimals = 18;
 
     function initialize(address asset, address houseAddress) public override {
         require(address(house) == address(0x0), "ERR_INTIIALIZED");
         house = IHouse(houseAddress);
-        string memory assetName = IVERC20(asset).name();
+        /* string memory assetName = IVERC20(asset).name();
         string memory assetSymbol = IVERC20(asset).symbol();
         _name = string(abi.encodePacked("Virtual Primitive", assetName));
-        _symbol = string(abi.encodePacked("vp", assetSymbol));
-    }
-
-    function name() public view override returns (string memory) {
-        return _name;
-    }
-
-    function symbol() public view override returns (string memory) {
-        return _symbol;
+        _symbol = string(abi.encodePacked("vp", assetSymbol)); */
     }
 
     modifier onlyHouse {

@@ -11,7 +11,7 @@ contract Capitol is Ownable, ICapitol {
         bool isEndorsed;
     }
 
-    mapping(IVenue => VenueAttributes) public venueState;
+    mapping(address => VenueAttributes) public venueState;
     IVenue[] public allVenues;
 
     constructor() public {}
@@ -22,7 +22,7 @@ contract Capitol is Ownable, ICapitol {
         string memory apiVersion,
         bool isEndorsed
     ) public override onlyOwner {
-        VenueAttributes storage venue = venueState[IVenue(venue_)];
+        VenueAttributes storage venue = venueState[venue_];
         venue.name = name;
         venue.apiVersion = apiVersion;
         venue.isEndorsed = isEndorsed;
@@ -30,12 +30,12 @@ contract Capitol is Ownable, ICapitol {
     }
 
     function endorse(address venue_) public override onlyOwner {
-        VenueAttributes memory venue = venueState[IVenue(venue_)];
+        VenueAttributes memory venue = venueState[venue_];
         venue.isEndorsed = true;
     }
 
     function getIsEndorsed(address venue_) public view override returns (bool) {
-        VenueAttributes memory venue = venueState[IVenue(venue_)];
+        VenueAttributes memory venue = venueState[venue_];
         return venue.isEndorsed;
     }
 
@@ -53,7 +53,7 @@ contract Capitol is Ownable, ICapitol {
             bool
         )
     {
-        VenueAttributes memory venue = venueState[IVenue(venue_)];
+        VenueAttributes memory venue = venueState[venue_];
         return (venue.name, venue.apiVersion, venue.isEndorsed);
     }
 }

@@ -7,7 +7,7 @@ interface IVERC20 {
 
     function burn(address to, uint256 quantity) external returns (bool);
 
-    function name() external view returns (string memory);
+    /* function name() external view returns (string memory);
 
-    function symbol() external view returns (string memory);
+    function symbol() external view returns (string memory); */
 }

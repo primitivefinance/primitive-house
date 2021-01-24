@@ -5,22 +5,26 @@ pragma solidity >=0.6.2;
  * @author  Primitive
  */
 
+// Open Zeppelin
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+
+// Primitive
 import {
     IOption
 } from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
+
+// Internal
+import {IERC20} from "./interfaces/IERC20.sol";
 import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {Router} from "./Router.sol";
 import {RouterLib} from "./libraries/RouterLib.sol";
-
-// Libraries
 import {SafeMath} from "./libraries/SafeMath.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import {Virtualizer} from "./Virtualizer.sol";
 
-contract VirtualRouter is Router, IPrimitiveRouter {
-    using SafeERC20 for IERC20;
-    using SafeERC20 for IOption;
+contract VirtualRouter is Virtualizer, Router {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     IWETH public weth;
 
@@ -67,10 +71,12 @@ contract VirtualRouter is Router, IPrimitiveRouter {
 
     // ==== Constructor ====
 
-    constructor(address weth_) public {
+    constructor(address weth_, address registry_)
+        public
+        Virtualizer(registry_)
+    {
         require(address(weth) == address(0x0), "ERR_INITIALIZED");
         weth = IWETH(weth_);
-        emit Initialized(msg.sender);
     }
 
     receive() external payable {
@@ -89,19 +95,19 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         IOption optionToken,
         uint256 mintQuantity,
         address receiver
-    ) public nonZero(mintQuantity) returns (uint256, uint256) {
-        IERC20(optionToken.getUnderlyingTokenAddress()).safeTransferFrom(
+    ) public override nonZero(mintQuantity) returns (uint256, uint256) {
+        address realUnderlying = optionToken.getUnderlyingTokenAddress();
+        IERC20(realUnderlying).transferFrom(
             msg.sender,
             address(this),
             mintQuantity
         );
         IOption virtualOption = IOption(virtualOptions[address(optionToken)]);
-        Reserve memory reserve =
-            _reserve[virtualOption.getUnderlyingTokenAddress()];
+        ReserveData memory reserve = _reserves[realUnderlying];
         reserve.virtualToken.mint(address(virtualOption), mintQuantity);
         emit Minted(
             msg.sender,
-            address(optionToken),
+            address(virtualOption),
             mintQuantity,
             RouterLib.getProportionalShortOptions(optionToken, mintQuantity)
         );
@@ -119,31 +125,53 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         IOption optionToken,
         uint256 exerciseQuantity,
         address receiver
-    ) public nonZero(exerciseQuantity) returns (uint256, uint256) {
-        // Calculate quantity of strikeTokens needed to exercise quantity of optionTokens.
+    ) public override nonZero(exerciseQuantity) returns (uint256, uint256) {
+        IOption virtualOption = IOption(virtualOptions[address(optionToken)]);
+
+        // Store in memory for gas savings.
+        address underlying = optionToken.getUnderlyingTokenAddress();
         address strikeToken = optionToken.getStrikeTokenAddress();
+
+        // Calculate quantity of strikeTokens needed to exercise quantity of optionTokens.
         uint256 inputStrikes =
             RouterLib.getProportionalShortOptions(
-                optionToken,
+                virtualOption,
                 exerciseQuantity
             );
-        IERC20(address(optionToken)).safeTransferFrom(
+
+        // Pull virtual options from `msg.sender` to the virtual option contract in preparation of exercise.
+        IERC20(address(virtualOption)).transferFrom(
             msg.sender,
-            address(optionToken),
+            address(virtualOption),
             exerciseQuantity
         );
-        IERC20(strikeToken).safeTransferFrom(
-            msg.sender,
-            address(optionToken),
-            inputStrikes
-        );
-        emit Exercised(msg.sender, address(optionToken), exerciseQuantity);
-        return
-            optionToken.exerciseOptions(
-                receiver,
+
+        // Mint virtual strike tokens to the option contract, in preparation of exercise.
+        ReserveData memory strikeReserve = _reserves[strikeToken];
+        strikeReserve.virtualToken.mint(address(virtualOption), inputStrikes);
+
+        // Exercise the virtual options to this contract.
+        (uint256 inStrikes, uint256 inOptions) =
+            virtualOption.exerciseOptions(
+                address(this),
                 exerciseQuantity,
                 new bytes(0)
             );
+
+        // Burn the synthetic underlying tokens received from exercise.
+        ReserveData memory underlyingReserve = _reserves[underlying];
+        underlyingReserve.virtualToken.burn(address(this), exerciseQuantity);
+
+        // Pull real strike tokens from `msg.sender`.
+        IERC20(strikeToken).transferFrom(
+            msg.sender,
+            address(this),
+            inputStrikes
+        );
+        // Push real underlying tokens to receiver.
+        IERC20(underlying).transfer(receiver, exerciseQuantity);
+        emit Exercised(msg.sender, address(virtualOption), exerciseQuantity);
+        return (inStrikes, inOptions);
     }
 
     /**
@@ -157,23 +185,28 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         IOption optionToken,
         uint256 redeemQuantity,
         address receiver
-    ) public nonZero(redeemQuantity) returns (uint256) {
+    ) public override nonZero(redeemQuantity) returns (uint256) {
         IOption virtualOption = IOption(virtualOptions[address(optionToken)]);
-        IERC20(virtualOption.redeemToken()).safeTransferFrom(
+        // Pull the virtual redeem tokens from the `msg.sender`.
+        IERC20(virtualOption.redeemToken()).transferFrom(
             msg.sender,
             address(virtualOption),
             redeemQuantity
         );
-        Reserve memory reserve =
-            _reserve[virtualOption.getStrikeTokenAddress()];
-        emit Redeemed(msg.sender, address(optionToken), redeemQuantity);
-        uint256 strikesRedeemed = virtualOption.redeemStrikeTokens(receiver);
+
+        // Call redeem on the virtual option and send strike tokens to this contract.
+        address realStrike = optionToken.getStrikeTokenAddress();
+        ReserveData memory reserve = _reserves[realStrike];
+        uint256 strikesRedeemed =
+            virtualOption.redeemStrikeTokens(address(this));
+
+        // Burn the virtual strike tokens from this contract.
         reserve.virtualToken.burn(address(this), redeemQuantity);
-        return
-            IERC20(optionToken.getStrikeTokenAddress()).safeTransfer(
-                receiver,
-                strikesRedeemed
-            );
+
+        // Push the real strike tokens from this contract to the `receiver`.
+        emit Redeemed(msg.sender, address(optionToken), redeemQuantity);
+        IERC20(realStrike).transfer(receiver, strikesRedeemed);
+        return strikesRedeemed;
     }
 
     /**
@@ -191,6 +224,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         address receiver
     )
         public
+        override
         nonZero(closeQuantity)
         returns (
             uint256,
@@ -198,25 +232,50 @@ contract VirtualRouter is Router, IPrimitiveRouter {
             uint256
         )
     {
+        IOption virtualOption = IOption(virtualOptions[address(optionToken)]);
         // Calculate the quantity of redeemTokens that need to be burned. (What we mean by Implicit).
         uint256 inputRedeems =
             RouterLib.getProportionalShortOptions(optionToken, closeQuantity);
-        IERC20(optionToken.redeemToken()).safeTransferFrom(
+
+        // Pull the virtual redeem tokens from the `msg.sender` and send them to the virtual option.
+        IERC20(virtualOption.redeemToken()).transferFrom(
             msg.sender,
-            address(optionToken),
+            address(virtualOption),
             inputRedeems
         );
-        if (optionToken.getExpiryTime() >= now)
-            IERC20(address(optionToken)).safeTransferFrom(
+
+        // If the option is not expired, need to pull long options too.
+        // Pull virtual long options from the `msg.sender` to the virtual option.
+        if (virtualOption.getExpiryTime() >= now) {
+            IERC20(address(virtualOption)).transferFrom(
                 msg.sender,
-                address(optionToken),
+                address(virtualOption),
                 closeQuantity
             );
-        emit Closed(msg.sender, address(optionToken), closeQuantity);
-        return optionToken.closeOptions(receiver);
+        }
+
+        // Exercise the virtual options to this contract.
+        (uint256 inRedeems, uint256 inOptions, uint256 outUnderlyings) =
+            virtualOption.closeOptions(address(this));
+
+        address realUnderlying = optionToken.getUnderlyingTokenAddress();
+        // Burn the virtual underlying tokens received from the closed virtual option.
+        ReserveData memory virtualUnderlyingReserve = _reserves[realUnderlying];
+
+        // Burn the virtual strike tokens from this contract.
+        virtualUnderlyingReserve.virtualToken.burn(
+            address(this),
+            closeQuantity
+        );
+        emit Closed(msg.sender, address(virtualOption), closeQuantity);
+
+        // Push the real underlying tokens to the `receiver`.
+        IERC20(realUnderlying).transfer(receiver, outUnderlyings);
+
+        return (inRedeems, inOptions, outUnderlyings);
     }
 
-    // ==== Primitive Core WETH  Abstraction ====
+    // ==== Primitive Core WETH  Abstraction ==== -> FIX: NEED TO IMPLEMENT VIRTUALS
 
     /**
      *@dev Mints msg.value quantity of options and "quote" (option parameter) quantity of redeem tokens.
@@ -227,6 +286,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
     function safeMintWithETH(IOption optionToken, address receiver)
         public
         payable
+        override
         nonZero(msg.value)
         returns (uint256, uint256)
     {
@@ -261,6 +321,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
     function safeExerciseWithETH(IOption optionToken, address receiver)
         public
         payable
+        override
         nonZero(msg.value)
         returns (uint256, uint256)
     {
@@ -283,7 +344,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
             address(optionToken),
             msg.value
         );
-        IERC20(address(optionToken)).safeTransferFrom(
+        IERC20(address(optionToken)).transferFrom(
             msg.sender,
             address(optionToken),
             inputOptions
@@ -309,7 +370,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         IOption optionToken,
         uint256 exerciseQuantity,
         address receiver
-    ) public nonZero(exerciseQuantity) returns (uint256, uint256) {
+    ) public override nonZero(exerciseQuantity) returns (uint256, uint256) {
         // Require one of the option's assets to be WETH.
         address underlyingAddress = optionToken.getUnderlyingTokenAddress();
         require(underlyingAddress == address(weth), "ERR_NOT_WETH");
@@ -334,7 +395,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         IOption optionToken,
         uint256 redeemQuantity,
         address receiver
-    ) public nonZero(redeemQuantity) returns (uint256) {
+    ) public override nonZero(redeemQuantity) returns (uint256) {
         // If options have not been exercised, there will be no strikeTokens to redeem, causing a revert.
         // Burns the redeem tokens that were sent to the contract, and withdraws the same quantity of WETH.
         // Sends the withdrawn WETH to this contract, so that it can be unwrapped prior to being sent to receiver.
@@ -361,6 +422,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         address receiver
     )
         public
+        override
         nonZero(closeQuantity)
         returns (
             uint256,
@@ -415,7 +477,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         IERC20(virtualShort.redeemToken()).transfer(receiver, strikeDifference);
 
         // Pull in the original long option.
-        virtualLong.safeTransferFrom(msg.sender, address(this), quantity);
+        virtualLong.transferFrom(msg.sender, address(this), quantity);
 
         emit OpenedDebitSpread(msg.sender, longOption, shortOption, quantity);
 
@@ -430,16 +492,35 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         // 1 - strikeDiff# of virtual short option (redeem) tokens
     }
 
+    function safeUnwind(
+        IOption optionToken,
+        uint256 unwindQuantity,
+        address receiver
+    )
+        external
+        override
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        return (0, 0, 0);
+    }
+
     // Option operations
 
     function virtualMint(
         address optionAddress,
         uint256 quantity,
         address receiver
-    ) external returns (address) {
-        _virtualMint(optionAddress, quantity, receiver);
+    ) public returns (address) {
+        address virtualOption = _virtualMint(optionAddress, quantity, receiver);
         // Pull real tokens to this contract.
-        _pullTokens(underlying, quantity);
+        _pullTokens(
+            IOption(optionAddress).getUnderlyingTokenAddress(),
+            quantity
+        );
         return virtualOption;
     }
 
@@ -448,10 +529,14 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         address optionAddress,
         uint256 quantity,
         address receiver
-    ) external returns (address) {
-        _virtualMint(optionAddress, quantity, receiver);
+    ) public returns (address) {
+        address virtualOption = _virtualMint(optionAddress, quantity, receiver);
         // Pull real tokens to this contract.
-        _pullTokensFrom(from, underlying, quantity);
+        _pullTokensFrom(
+            from,
+            IOption(optionAddress).getUnderlyingTokenAddress(),
+            quantity
+        );
         return virtualOption;
     }
 
@@ -459,7 +544,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         address optionAddress,
         uint256 quantity,
         address receiver
-    ) external returns (address) {
+    ) internal returns (address) {
         address virtualOption = virtualOptions[optionAddress];
         require(virtualOption != address(0x0), "ERR_NOT_DEPLOYED");
 
@@ -482,7 +567,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         address optionAddress,
         uint256 quantity,
         address receiver
-    ) external {
+    ) public {
         address virtualOption = virtualOptions[optionAddress];
         require(virtualOption != address(0x0), "ERR_NOT_DEPLOYED");
 
@@ -491,11 +576,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         address strike = IOption(optionAddress).getStrikeTokenAddress();
 
         // Move virtual options from msg.sender to virtual option contract itself.
-        IERC20(virtualOption).safeTransferFrom(
-            msg.sender,
-            virtualOption,
-            quantity
-        );
+        IERC20(virtualOption).transferFrom(msg.sender, virtualOption, quantity);
 
         // Calculate strike tokens needed to exercise.
         uint256 amountStrikeTokens =
@@ -515,10 +596,10 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         _reserves[underlying].virtualToken.burn(address(this), quantity);
 
         // Push real underlying tokens to receiver.
-        IERC20(underlying).safeTransfer(receiver, quantity);
+        IERC20(underlying).transfer(receiver, quantity);
 
         // Pull real strike tokens to this contract.
-        IERC20(strike).safeTransferFrom(
+        IERC20(strike).transferFrom(
             msg.sender,
             address(this),
             amountStrikeTokens
@@ -539,7 +620,7 @@ contract VirtualRouter is Router, IPrimitiveRouter {
     }
 
     function _pullTokens(address token, uint256 quantity) internal {
-        IERC20(token).safeTransferFrom(msg.sender, address(this), quantity);
+        IERC20(token).transferFrom(msg.sender, address(this), quantity);
     }
 
     function _pullTokensFrom(
@@ -547,6 +628,6 @@ contract VirtualRouter is Router, IPrimitiveRouter {
         address token,
         uint256 quantity
     ) internal {
-        IERC20(token).safeTransferFrom(from, address(this), quantity);
+        IERC20(token).transferFrom(from, address(this), quantity);
     }
 }

@@ -6,22 +6,26 @@ pragma solidity >=0.6.2;
  * @author  Primitive
  */
 
-import {SafeMath} from "./libraries/SafeMath.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
 import {
     IOption
 } from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
-import {ISERC20} from "./interfaces/ISERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {
+    IRegistry
+} from "@primitivefi/contracts/contracts/option/interfaces/IRegistry.sol";
+import {SafeMath} from "./libraries/SafeMath.sol";
+import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
+import {IVERC20} from "./interfaces/IVERC20.sol";
 
-contract Virtualizer is Ownable {
-    using SafeERC20 for IERC20;
-    using SafeERC20 for IOption;
+contract Virtualizer is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
     struct ReserveData {
-        ISERC20 virtualToken;
+        IVERC20 virtualToken;
     }
 
     IRegistry public registry;
@@ -29,25 +33,15 @@ contract Virtualizer is Ownable {
     mapping(address => address) public virtualOptions;
     mapping(address => ReserveData) internal _reserves;
 
-    // mutex
-    bool private _notEntered;
-
-    modifier nonReentrant() {
-        require(notEntered == 1, "Virtualizer: NON_REENTRANT");
-        notEntered = true;
-        _;
-        notEntered = false;
-    }
-
     constructor(address registry_) public {
         registry = IRegistry(registry_);
     }
 
     // Initializes a new virtual asset.
     function issueVirtual(address asset, address virtualAsset) external {
-        ISERC20(virtualAsset).initialize(asset, address(this));
+        IVERC20(virtualAsset).initialize(asset, address(this));
         ReserveData storage reserve = _reserves[asset];
-        reserve.virtualToken = ISERC20(virtualAsset);
+        reserve.virtualToken = IVERC20(virtualAsset);
     }
 
     // Initialize a virtual option.

@@ -15,14 +15,21 @@ import {
     IOption,
     IERC20
 } from "../interfaces/IUniswapVenue.sol";
+import {
+    IUniswapV2Pair
+} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 // Internal
+import {ICapitol} from "../interfaces/ICapitol.sol";
+import {IHouse} from "../interfaces/IHouse.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 import {UniswapVenueLib} from "../libraries/UniswapVenueLib.sol";
+import {RouterLib} from "../libraries/RouterLib.sol";
 import {Venue} from "../Venue.sol";
 import {VirtualRouter} from "../VirtualRouter.sol";
 
-contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
+contract UniswapVenue is Venue, VirtualRouter, IUniswapVenue {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
 
@@ -31,7 +38,6 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
     IUniswapV2Router02 public override router =
         IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); // The Uniswap contract used to interact with the protocol
 
-    IWETH public weth;
     IHouse public house;
     ICapitol public capitol;
 
@@ -44,32 +50,21 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
     event SoldOptions(address indexed from, uint256 quantity, uint256 payout);
     event WroteOption(address indexed from, uint256 quantity);
 
-    /// @dev Checks the quantity of an operation to make sure its not zero. Fails early.
-    modifier nonZero(uint256 quantity) {
-        require(quantity > 0, "ERR_ZERO");
-        _;
-    }
-
     // ==== Constructor ====
 
     constructor(
         address weth_,
+        address registry_,
         address house_,
         address capitol_
-    ) public {
-        require(address(weth) == address(0x0), "ERR_INITIALIZED");
-        weth = IWETH(weth_);
+    ) public VirtualRouter(weth_, registry_) {
         house = IHouse(house_);
         capitol = ICapitol(capitol_);
         emit Initialized(msg.sender);
     }
 
-    receive() external payable {
-        assert(msg.sender == address(weth)); // only accept ETH via fallback from the WETH contract
-    }
-
     // ==== Simple ====
-    function pool(address option) external override returns (address) {
+    function pool(address option) external view override returns (address) {
         address underlying = IOption(option).getUnderlyingTokenAddress();
         address redeem = IOption(option).redeemToken();
         address pair = factory.getPair(underlying, redeem);
@@ -90,7 +85,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         uint256[] memory minAmounts,
         address receiver,
         uint256 deadline
-    ) public {
+    ) public override returns (uint256) {
         uint256 optionsLength = options.length;
         uint256 maxAmountsLength = maxAmounts.length;
         uint256 minAmountsLength = minAmounts.length;
@@ -105,21 +100,26 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
             uint256 optionsToMint = maxAmounts[i];
             uint256 underlyingDeposit = maxAmounts[i + 1];
             uint256 shortOptionsToMint =
-                UniswapVenue.getProportionalShort(optionAddress, optionsToMint);
+                RouterLib.getProportionalShortOptions(
+                    IOption(optionAddress),
+                    optionsToMint
+                );
             require(
                 shortOptionsToMint == minAmounts[i],
                 "UniswapVenue: SHORT_OPTIONS_INPUT"
             );
-            uint256 minUnderlyingToDeposit = minAmounts[i + 1];
-            addShortLiquidityWithUnderlying(
+            uint256 minUnderlyingDeposit = minAmounts[i + 1];
+            /* addShortLiquidityWithUnderlying(
                 optionAddress,
                 optionsToMint,
                 underlyingDeposit,
                 minUnderlyingDeposit,
                 receiver,
                 deadline
-            );
+            ); */
         }
+
+        return 1;
     }
 
     function depositLeveraged(
@@ -140,11 +140,15 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
             );
 
         // encodes the add liquidity function call parameters
-        address synthOption = house.syntheticOptions[optionAddress]; // synthetic version of the option
-        address redeem = IOption(synthOption).redeemToken(); // synthetic version of the redeem
+        /* address virtualOption = house.virtualOptions(optionAddress); // synthetic version of the option
+        address redeem = IOption(virtualOption).redeemToken(); // synthetic version of the redeem
         address underlying = IOption(optionAddress).getUnderlyingTokenAddress(); // actual underlying
         uint256 total = quantityOptions.add(amountBMax); // the total deposit quantity in underlying tokens
-        uint256 outputRedeems = proportionalShort(total); // the synthetic short options minted from total deposit
+        uint256 outputRedeems =
+            RouterLib.getProportionalShortOptions(
+                IOption(virtualOption),
+                total
+            ); // the synthetic short options minted from total deposit
         bytes memory params =
             abi.encodeWithSelector(
                 selector, // function to call in this contract
@@ -158,7 +162,6 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
                 deadline
             );
 
-        IUniswapV2Router02 router = router;
         // calls the house to double the position and store the lp tokens as collateral
         // house will call the `params` data to the router.
         house.doublePosition(
@@ -167,7 +170,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
             total,
             address(router),
             params
-        );
+        ); */
     }
 
     /**
@@ -182,7 +185,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         uint256[] memory minAmounts,
         address receiver,
         uint256 deadline
-    ) public {
+    ) public override returns (uint256) {
         uint256 optionsLength = options.length;
         uint256 quantitiesLength = quantities.length;
         uint256 minAmountsLength = minAmounts.length;
@@ -206,6 +209,8 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
                 deadline
             );
         }
+
+        return 1;
     }
 
     function withdrawDouble(
@@ -215,7 +220,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         address receiver,
         uint256 deadline
     ) public {
-        bytes4 selector =
+        /* bytes4 selector =
             bytes4(
                 keccak256(
                     bytes(
@@ -225,8 +230,8 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
             );
 
         // encodes the add liquidity function call parameters
-        address synthOption = house.syntheticOptions[optionAddress]; // synthetic version of the option
-        address redeem = IOption(synthOption).redeemToken(); // synthetic version of the redeem
+        address virtualOption = house.syntheticOptions[optionAddress]; // synthetic version of the option
+        address redeem = IOption(virtualOption).redeemToken(); // synthetic version of the redeem
         address underlying = IOption(optionAddress).getUnderlyingTokenAddress(); // actual underlying
         bytes memory params =
             abi.encodeWithSelector(
@@ -249,7 +254,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
             liquidity,
             address(router),
             params
-        );
+        ); */
     }
 
     // ==== Swap Operations ====
@@ -265,7 +270,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         IOption[] memory options,
         uint256[] memory quantities,
         uint256[] memory minAmounts
-    ) external returns (bool) {
+    ) public override returns (bool) {
         uint256 optionsLength = options.length;
         uint256 quantitiesLength = quantities.length;
         uint256 minAmountsLength = minAmounts.length;
@@ -284,11 +289,11 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
             (, uint256 outputRedeems) =
                 safeMint(optionToken, writeQuantity, msg.sender);
 
-            // Sell the long option tokens for underlyingToken premium.
-            success = closeFlashLong(optionToken, outputRedeems, minPayout);
             require(success, "ERR_FLASH_CLOSE");
             emit WroteOption(msg.sender, writeQuantity);
         }
+        // Sell the long option tokens for underlyingToken premium.
+        success = swapFromOptionsToUnderlying(options, quantities, minAmounts);
         return success;
     }
 
@@ -312,7 +317,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
 
         // Sell the long option tokens for underlyingToken premium.
         bool success =
-            closeFlashLongForETH(optionToken, outputRedeems, minPayout);
+            swapOptionsToUnderlyingForETH(optionToken, outputRedeems, minPayout);
         require(success, "ERR_FLASH_CLOSE");
         emit WroteOption(msg.sender, msg.value);
         return success;
@@ -377,7 +382,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         IOption[] memory options,
         uint256[] memory quantities,
         uint256[] memory maxAmounts
-    ) external payable nonZero(msg.value) returns (bool) {
+    ) public payable override nonZero(msg.value) returns (bool) {
         bytes4 selector =
             bytes4(
                 keccak256(
@@ -387,6 +392,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
                 )
             );
 
+        uint256 optionsLength = options.length;
         uint256 totalMaxPremium;
         for (uint256 i = 0; i < optionsLength; i++) {
             totalMaxPremium = totalMaxPremium.add(maxAmounts[i]);
@@ -396,7 +402,6 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
             "UniswapVenue: TOTAL_MAX_PREMIUM"
         ); // must assert because cannot check in callback
 
-        uint256 optionsLength = options.length;
         uint256 quantitiesLength = quantities.length;
         uint256 maxAmountsLength = maxAmounts.length;
         require(
@@ -477,10 +482,10 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
      * @param minAmounts The minimum payout of underlyingTokens sent out to the user.
      */
     function swapFromOptionsToETH(
-        IOption[] calldata options,
-        uint256[] calldata quantities,
-        uint256[] calldata minAmounts
-    ) public nonReentrant returns (bool) {
+        IOption[] memory options,
+        uint256[] memory quantities,
+        uint256[] memory minAmounts
+    ) public override nonReentrant returns (bool) {
         bytes4 selector =
             bytes4(
                 keccak256(
@@ -580,8 +585,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         address to,
         uint256 deadline
     )
-        public
-        override
+        internal
         returns (
             uint256,
             uint256,
@@ -762,7 +766,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         uint256 amountBMin,
         address to,
         uint256 deadline
-    ) public override nonReentrant returns (uint256, uint256) {
+    ) internal nonReentrant returns (uint256, uint256) {
         IOption optionToken = IOption(optionAddress);
         address redeemToken = optionToken.redeemToken();
         address underlyingTokenAddress =
@@ -811,7 +815,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
 
         // longOptions = shortOptions / strikeRatio
         uint256 requiredLongOptions =
-            UniswapVenueLib.getProportionalLongOptions(
+            RouterLib.getProportionalLongOptions(
                 optionToken,
                 shortTokensWithdrawn
             );
@@ -880,7 +884,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
                 address(this),
                 deadline
             );
-        UniswapVenueLib.safeTransferWETHToETH(weth, to, totalUnderlying);
+        RouterLib.safeTransferWETHToETH(weth, to, totalUnderlying);
         IERC20(IOption(optionAddress).redeemToken()).safeTransfer(
             to,
             totalRedeem
@@ -1170,7 +1174,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         // Close longOptionTokens using the redeemToken balance of this contract.
         IERC20(redeemToken).safeTransfer(optionAddress, flashLoanQuantity);
         uint256 requiredLongOptions =
-            UniswapVenueLib.getProportionalLongOptions(
+            RouterLib.getProportionalLongOptions(
                 IOption(optionAddress),
                 flashLoanQuantity
             );
@@ -1299,7 +1303,7 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
         if (underlyingPayout > 0) {
             // Revert if minPayout is greater than the actual payout.
             require(underlyingPayout >= minPayout, "ERR_PREMIUM_UNDER_MIN");
-            UniswapVenueLib.safeTransferWETHToETH(weth, to, underlyingPayout);
+            RouterLib.safeTransferWETHToETH(weth, to, underlyingPayout);
         }
         return (outputUnderlyings, underlyingPayout);
     }
@@ -1336,17 +1340,19 @@ contract UniswapVenue is Ownable, Venue, VirtualRouter, ReentrancyGuard {
      * @dev Gets the name of the contract.
      */
     function getName() external view override returns (string memory) {
-        return capitol.venueState(address(this)).name;
+        (string memory name, , ) = capitol.getVenueAttributes(address(this));
+        return name;
     }
 
     /**
      * @dev Gets the version of the contract.
      */
     function getVersion() external view override returns (string memory) {
-        return capitol.venueState(address(this)).apiVersion;
+        (,string memory apiVersion , ) = capitol.getVenueAttributes(address(this));
+        return apiVersion;
     }
 
-    function getIsEndorsed() external view override returns (bool) {
+    function getIsEndorsed() external view returns (bool) {
         return capitol.getIsEndorsed(address(this));
     }
 
