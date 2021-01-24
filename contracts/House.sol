@@ -23,8 +23,6 @@ import {Accelerator} from "./Accelerator.sol";
 import {ICapitol} from "./interfaces/ICapitol.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IVERC20} from "./interfaces/IVERC20.sol";
-import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
-import {IVenue} from "./interfaces/IVenue.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {RouterLib} from "./libraries/RouterLib.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";

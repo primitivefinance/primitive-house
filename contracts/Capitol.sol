@@ -1,7 +1,6 @@
 pragma solidity >=0.6.2;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IVenue} from "./interfaces/IVenue.sol";
 import {ICapitol} from "./interfaces/ICapitol.sol";
 
 contract Capitol is Ownable, ICapitol {
@@ -12,7 +11,7 @@ contract Capitol is Ownable, ICapitol {
     }
 
     mapping(address => VenueAttributes) public venueState;
-    IVenue[] public allVenues;
+    address[] public allVenues;
 
     constructor() public {}
 
@@ -26,7 +25,7 @@ contract Capitol is Ownable, ICapitol {
         venue.name = name;
         venue.apiVersion = apiVersion;
         venue.isEndorsed = isEndorsed;
-        allVenues.push(IVenue(venue_));
+        allVenues.push(venue_);
     }
 
     function endorse(address venue_) public override onlyOwner {

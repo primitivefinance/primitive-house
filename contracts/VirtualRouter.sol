@@ -15,7 +15,6 @@ import {
 
 // Internal
 import {IERC20} from "./interfaces/IERC20.sol";
-import {IPrimitiveRouter} from "./interfaces/IPrimitiveRouter.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {Router} from "./Router.sol";
 import {RouterLib} from "./libraries/RouterLib.sol";

@@ -1,7 +1,5 @@
 pragma solidity >=0.6.2;
 
-import {IVenue} from "./IVenue.sol";
-
 interface ICapitol {
     function addVenue(
         address venue_,
@@ -24,6 +22,4 @@ interface ICapitol {
             string memory,
             bool
         );
-
-    //function allVenues() external returns (IVenue[] memory);
 }

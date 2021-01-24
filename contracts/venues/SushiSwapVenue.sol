@@ -13,18 +13,14 @@ import {
 } from "../interfaces/ISushiSwapVenue.sol";
 
 // Internal
-import {BaseVenue} from "../BaseVenue.sol";
+import {Venue} from "./Venue.sol";
 import {ICapitol} from "../interfaces/ICapitol.sol";
 import {IHouse} from "../interfaces/IHouse.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 import {RouterLib} from "../libraries/RouterLib.sol";
-import {Venue} from "../Venue.sol";
 
-contract SushiSwapVenue is
-    BaseVenue, /* Venue, */
-    ISushiSwapVenue
-{
+contract SushiSwapVenue is Venue, ISushiSwapVenue {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
 
@@ -43,7 +39,7 @@ contract SushiSwapVenue is
         address weth_,
         address house_,
         address capitol_
-    ) public BaseVenue(weth_, house_) {
+    ) public Venue(weth_, house_) {
         house = IHouse(house_);
         capitol = ICapitol(capitol_);
         emit Initialized(msg.sender);
