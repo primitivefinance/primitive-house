@@ -11,6 +11,7 @@ require('@nomiclabs/hardhat-waffle')
 require('hardhat-deploy')
 require('hardhat-gas-reporter')
 require('solidity-coverage')
+require('prettier-plugin-solidity')
 
 // == Environment ==
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || crypto.randomBytes(20).toString('base64')
@@ -63,7 +64,7 @@ Object.assign(module.exports, {
     enabled: true,
   },
   solidity: {
-    version: '0.7.0',
+    version: '0.6.2',
     settings: {
       optimizer: {
         enabled: true,

@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "test": "cross-env hardhat test",
+    "prettier": "prettier --write 'contracts/**/*.sol'",
     "coverage": "cross-env hardhat coverage --network coverage",
     "task:clean": "hardhat clean",
     "task:compile": "hardhat compile",
@@ -65,6 +66,7 @@
   "dependencies": {
     "@openzeppelin/contracts": "^3.2.0",
     "@primitivefi/contracts": "^0.4.2",
+    "@primitivefi/v1-connectors": "^1.2.2",
     "@uniswap/v2-core": "^1.0.1",
     "@uniswap/v2-periphery": "^1.1.0-beta.0"
   }
