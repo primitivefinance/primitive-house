@@ -1,19 +1,72 @@
 pragma solidity >=0.6.2;
 
+import {
+    IOption,
+    IERC20
+} from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
+
 interface IVenue {
     // adding liquidity returns quantity of lp tokens minted
-    function deposit(bytes calldata params) external returns (uint256);
+    function deposit(
+        address[] calldata options,
+        uint256[] calldata maxAmounts,
+        uint256[] calldata minAmounts,
+        address receiver,
+        uint256 deadline
+    ) external virtual returns (uint256);
 
     // removing liquidity returns quantities of tokens withdrawn
-    function withdraw(uint256 amount)
-        external
-        returns (address[] memory tokens, uint256[] memory amounts);
+    function withdraw(
+        address[] calldata options,
+        uint256[] calldata quantities,
+        uint256[] calldata minAmounts,
+        address receiver,
+        uint256 deadline
+    ) external virtual returns (uint256);
 
-    function pool(address) external view returns (address);
+    function pool(address option) external view virtual returns (address);
 
-    function swap(
+    /* function swap(
         address[] calldata path,
         uint256 quantity,
         uint256 maxPremium
-    ) external returns (uint256[] memory amounts);
+    ) external virtual returns (uint256[] memory amounts); */
+
+    // buy options
+    function swapFromUnderlyingToOptions(
+        IOption[] calldata options,
+        uint256[] calldata quantities,
+        uint256[] calldata maxAmounts
+    ) external virtual returns (bool);
+
+    function swapFromETHToOptions(
+        IOption[] calldata options,
+        uint256[] calldata quantities,
+        uint256[] calldata maxAmounts
+    ) external payable virtual returns (bool);
+
+    // sell options
+    function swapFromOptionsToUnderlying(
+        IOption[] calldata options,
+        uint256[] calldata quantities,
+        uint256[] calldata minAmounts
+    ) external virtual returns (bool);
+
+    function swapFromOptionsToETH(
+        IOption[] calldata options,
+        uint256[] calldata quantities,
+        uint256[] calldata minAmounts
+    ) external virtual returns (bool);
+
+    // write options
+    function writeOptions(
+        IOption[] calldata options,
+        uint256[] calldata quantities,
+        uint256[] calldata minAmounts
+    ) external virtual returns (bool);
+
+    /* function writeETHOptionsForETH(
+        IOption[] calldata options,
+        uint256[] calldata minAmounts
+    ) external payable virtual returns (uint256[] memory amounts); */
 }

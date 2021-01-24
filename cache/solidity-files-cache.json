@@ -1,10 +1,10 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Capitol.sol": {
-      "lastModificationDate": 1611442545432,
-      "contentHash": "9540e01e24785140e90373acea6efbe9",
-      "sourceName": "contracts/Capitol.sol",
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\BaseVenue.sol": {
+      "lastModificationDate": 1611520566056,
+      "contentHash": "7fa10bcabe9e0cd4a0087d17968e3412",
+      "sourceName": "contracts/BaseVenue.sol",
       "solcConfig": {
         "version": "0.6.2",
         "settings": {
@@ -36,285 +36,17 @@
         }
       },
       "imports": [
-        "@openzeppelin/contracts/access/Ownable.sol",
-        "./interfaces/IVenue.sol",
-        "./interfaces/ICapitol.sol"
-      ],
-      "versionPragmas": [
-        ">=0.6.2"
-      ],
-      "artifacts": [
-        "Capitol"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\access\\Ownable.sol": {
-      "lastModificationDate": 1606935915953,
-      "contentHash": "38c56382c57a9e9dab92cee051155870",
-      "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "../GSN/Context.sol"
-      ],
-      "versionPragmas": [
-        ">=0.6.0 <0.8.0"
-      ],
-      "artifacts": [
-        "Ownable"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IVenue.sol": {
-      "lastModificationDate": 1611454141174,
-      "contentHash": "fe092950338ffedf4a267ab54cfc35f0",
-      "sourceName": "contracts/interfaces/IVenue.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        ">=0.6.2"
-      ],
-      "artifacts": [
-        "IVenue"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\ICapitol.sol": {
-      "lastModificationDate": 1611455166492,
-      "contentHash": "a3ace6a220d85f53e2adcd05b63a6254",
-      "sourceName": "contracts/interfaces/ICapitol.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "./IVenue.sol"
-      ],
-      "versionPragmas": [
-        ">=0.6.2"
-      ],
-      "artifacts": [
-        "ICapitol"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\GSN\\Context.sol": {
-      "lastModificationDate": 1606935915894,
-      "contentHash": "2adbd82f6d055a4751566d4671512b03",
-      "sourceName": "@openzeppelin/contracts/GSN/Context.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        ">=0.6.0 <0.8.0"
-      ],
-      "artifacts": [
-        "Context"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\venues\\UniswapVenue.sol": {
-      "lastModificationDate": 1611455450102,
-      "contentHash": "1fa96cc4e1357422d0596410444df2dc",
-      "sourceName": "contracts/venues/UniswapVenue.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "@openzeppelin/contracts/access/Ownable.sol",
-        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
         "@openzeppelin/contracts/token/ERC20/SafeERC20.sol",
-        "../interfaces/IUniswapVenue.sol",
-        "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol",
-        "../interfaces/ICapitol.sol",
-        "../interfaces/IHouse.sol",
-        "../interfaces/IWETH.sol",
-        "../libraries/SafeMath.sol",
-        "../libraries/UniswapVenueLib.sol",
-        "../libraries/RouterLib.sol",
-        "../Venue.sol",
-        "../VirtualRouter.sol"
+        "./interfaces/IERC20.sol",
+        "./interfaces/IHouse.sol",
+        "./interfaces/IWETH.sol",
+        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol"
       ],
       "versionPragmas": [
         ">=0.6.2"
       ],
       "artifacts": [
-        "UniswapVenue"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\utils\\ReentrancyGuard.sol": {
-      "lastModificationDate": 1606935915960,
-      "contentHash": "1c60f58cee45c61469e1aea31e4dd879",
-      "sourceName": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        ">=0.6.0 <0.8.0"
-      ],
-      "artifacts": [
-        "ReentrancyGuard"
+        "BaseVenue"
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\SafeERC20.sol": {
@@ -363,56 +95,10 @@
         "SafeERC20"
       ]
     },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IUniswapVenue.sol": {
-      "lastModificationDate": 1611448399359,
-      "contentHash": "5a3387ba6ca4df90a15f92135163a98b",
-      "sourceName": "contracts/interfaces/IUniswapVenue.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol",
-        "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol",
-        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol"
-      ],
-      "versionPragmas": [
-        ">=0.6.2"
-      ],
-      "artifacts": [
-        "IUniswapVenue"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@uniswap\\v2-core\\contracts\\interfaces\\IUniswapV2Pair.sol": {
-      "lastModificationDate": 1593303259441,
-      "contentHash": "3fa31c3860f2b9585c3a98c64850829e",
-      "sourceName": "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol",
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IERC20.sol": {
+      "lastModificationDate": 1611208369551,
+      "contentHash": "3dd2250235bb04d17200d80e994aed9a",
+      "sourceName": "contracts/interfaces/IERC20.sol",
       "solcConfig": {
         "version": "0.6.2",
         "settings": {
@@ -448,12 +134,12 @@
         ">=0.5.0"
       ],
       "artifacts": [
-        "IUniswapV2Pair"
+        "IERC20"
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IHouse.sol": {
-      "lastModificationDate": 1611454723568,
-      "contentHash": "43f69798d6f4a1b74da65b268520bf6a",
+      "lastModificationDate": 1611520574054,
+      "contentHash": "e58e2b1aa29d863b961b6864bffd6810",
       "sourceName": "contracts/interfaces/IHouse.sol",
       "solcConfig": {
         "version": "0.6.2",
@@ -535,52 +221,10 @@
         "IWETH"
       ]
     },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\libraries\\SafeMath.sol": {
-      "lastModificationDate": 1611208348432,
-      "contentHash": "e2bfc4635f391f6e988c05fe90064cd7",
-      "sourceName": "contracts/libraries/SafeMath.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        ">=0.6.0 <0.8.0"
-      ],
-      "artifacts": [
-        "SafeMath"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\libraries\\UniswapVenueLib.sol": {
-      "lastModificationDate": 1611432593447,
-      "contentHash": "db5f1ce55ff2f0ffbabb3722f92221cf",
-      "sourceName": "contracts/libraries/UniswapVenueLib.sol",
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@primitivefi\\contracts\\contracts\\option\\interfaces\\IOption.sol": {
+      "lastModificationDate": 1604877109575,
+      "contentHash": "2c690f746b26459fe4a1bd7c4b59b6e9",
+      "sourceName": "@primitivefi/contracts/contracts/option/interfaces/IOption.sol",
       "solcConfig": {
         "version": "0.6.2",
         "settings": {
@@ -612,163 +256,13 @@
         }
       },
       "imports": [
-        "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol",
-        "@primitivefi/contracts/contracts/option/interfaces/ITrader.sol",
-        "@primitivefi/contracts/contracts/option/libraries/TraderLib.sol",
-        "../interfaces/IWETH.sol",
-        "@openzeppelin/contracts/math/SafeMath.sol",
-        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol"
+        "@openzeppelin/contracts/token/ERC20/ERC20.sol"
       ],
       "versionPragmas": [
         "0.6.2"
       ],
       "artifacts": [
-        "UniswapVenueLib"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\libraries\\RouterLib.sol": {
-      "lastModificationDate": 1611432456654,
-      "contentHash": "f539657643249412e9dafcc1216cca47",
-      "sourceName": "contracts/libraries/RouterLib.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "@primitivefi/contracts/contracts/option/interfaces/ITrader.sol",
-        "@primitivefi/contracts/contracts/option/libraries/TraderLib.sol",
-        "../interfaces/IWETH.sol",
-        "@openzeppelin/contracts/math/SafeMath.sol",
-        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol"
-      ],
-      "versionPragmas": [
-        "0.6.2"
-      ],
-      "artifacts": [
-        "RouterLib"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Venue.sol": {
-      "lastModificationDate": 1611448498684,
-      "contentHash": "4774156513c86e3ff3be398fdc451799",
-      "sourceName": "contracts/Venue.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "./interfaces/IVenue.sol",
-        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol"
-      ],
-      "versionPragmas": [
-        ">=0.6.2"
-      ],
-      "artifacts": [
-        "Venue"
-      ]
-    },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\VirtualRouter.sol": {
-      "lastModificationDate": 1611452291387,
-      "contentHash": "2883ac3110987e7967988ddd836b624e",
-      "sourceName": "contracts/VirtualRouter.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol",
-        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol",
-        "./interfaces/IERC20.sol",
-        "./interfaces/IPrimitiveRouter.sol",
-        "./interfaces/IWETH.sol",
-        "./Router.sol",
-        "./libraries/RouterLib.sol",
-        "./libraries/SafeMath.sol",
-        "./Virtualizer.sol"
-      ],
-      "versionPragmas": [
-        ">=0.6.2"
-      ],
-      "artifacts": [
-        "VirtualRouter"
+        "IOption"
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\IERC20.sol": {
@@ -897,6 +391,371 @@
         "Address"
       ]
     },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\ERC20.sol": {
+      "lastModificationDate": 1606935915911,
+      "contentHash": "1d93743f6ca9d2ecf9b3c26718faf610",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/ERC20.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "../../GSN/Context.sol",
+        "./IERC20.sol",
+        "../../math/SafeMath.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.0 <0.8.0"
+      ],
+      "artifacts": [
+        "ERC20"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\GSN\\Context.sol": {
+      "lastModificationDate": 1606935915894,
+      "contentHash": "2adbd82f6d055a4751566d4671512b03",
+      "sourceName": "@openzeppelin/contracts/GSN/Context.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.6.0 <0.8.0"
+      ],
+      "artifacts": [
+        "Context"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\venues\\SushiSwapVenue.sol": {
+      "lastModificationDate": 1611520981128,
+      "contentHash": "2c0dbf7474b8ab6abcdf617f62483123",
+      "sourceName": "contracts/venues/SushiSwapVenue.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol",
+        "../interfaces/ISushiSwapVenue.sol",
+        "../BaseVenue.sol",
+        "../interfaces/ICapitol.sol",
+        "../interfaces/IHouse.sol",
+        "../interfaces/IWETH.sol",
+        "../libraries/SafeMath.sol",
+        "../libraries/RouterLib.sol",
+        "../Venue.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "SushiSwapVenue"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\ISushiSwapVenue.sol": {
+      "lastModificationDate": 1611520619300,
+      "contentHash": "04c78b578967e0ae3a8d2d7099c2e800",
+      "sourceName": "contracts/interfaces/ISushiSwapVenue.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol",
+        "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol",
+        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "ISushiSwapVenue"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\ICapitol.sol": {
+      "lastModificationDate": 1611455166492,
+      "contentHash": "a3ace6a220d85f53e2adcd05b63a6254",
+      "sourceName": "contracts/interfaces/ICapitol.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "./IVenue.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "ICapitol"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\libraries\\SafeMath.sol": {
+      "lastModificationDate": 1611208348432,
+      "contentHash": "e2bfc4635f391f6e988c05fe90064cd7",
+      "sourceName": "contracts/libraries/SafeMath.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.6.0 <0.8.0"
+      ],
+      "artifacts": [
+        "SafeMath"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\libraries\\RouterLib.sol": {
+      "lastModificationDate": 1611432456654,
+      "contentHash": "f539657643249412e9dafcc1216cca47",
+      "sourceName": "contracts/libraries/RouterLib.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@primitivefi/contracts/contracts/option/interfaces/ITrader.sol",
+        "@primitivefi/contracts/contracts/option/libraries/TraderLib.sol",
+        "../interfaces/IWETH.sol",
+        "@openzeppelin/contracts/math/SafeMath.sol",
+        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol"
+      ],
+      "versionPragmas": [
+        "0.6.2"
+      ],
+      "artifacts": [
+        "RouterLib"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Venue.sol": {
+      "lastModificationDate": 1611520468934,
+      "contentHash": "4774156513c86e3ff3be398fdc451799",
+      "sourceName": "contracts/Venue.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "./interfaces/IVenue.sol",
+        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "Venue"
+      ]
+    },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@uniswap\\v2-periphery\\contracts\\interfaces\\IUniswapV2Router02.sol": {
       "lastModificationDate": 1594353505741,
       "contentHash": "3fd36426274a5b35f7e702f87ba08a8e",
@@ -983,50 +842,6 @@
         "IUniswapV2Factory"
       ]
     },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@primitivefi\\contracts\\contracts\\option\\interfaces\\IOption.sol": {
-      "lastModificationDate": 1604877109575,
-      "contentHash": "2c690f746b26459fe4a1bd7c4b59b6e9",
-      "sourceName": "@primitivefi/contracts/contracts/option/interfaces/IOption.sol",
-      "solcConfig": {
-        "version": "0.6.2",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata",
-                "devdoc",
-                "userdoc",
-                "storageLayout",
-                "evm.gasEstimates"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          },
-          "metadata": {
-            "useLiteralContent": true
-          }
-        }
-      },
-      "imports": [
-        "@openzeppelin/contracts/token/ERC20/ERC20.sol"
-      ],
-      "versionPragmas": [
-        "0.6.2"
-      ],
-      "artifacts": [
-        "IOption"
-      ]
-    },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@uniswap\\v2-periphery\\contracts\\interfaces\\IUniswapV2Router01.sol": {
       "lastModificationDate": 1594353505740,
       "contentHash": "95d8729b2c698dc663322167b3c085fe",
@@ -1069,10 +884,10 @@
         "IUniswapV2Router01"
       ]
     },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\ERC20.sol": {
-      "lastModificationDate": 1606935915911,
-      "contentHash": "1d93743f6ca9d2ecf9b3c26718faf610",
-      "sourceName": "@openzeppelin/contracts/token/ERC20/ERC20.sol",
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IVenue.sol": {
+      "lastModificationDate": 1611519992733,
+      "contentHash": "3b017a12dda6c56dcce85d352bafff33",
+      "sourceName": "contracts/interfaces/IVenue.sol",
       "solcConfig": {
         "version": "0.6.2",
         "settings": {
@@ -1104,15 +919,13 @@
         }
       },
       "imports": [
-        "../../GSN/Context.sol",
-        "./IERC20.sol",
-        "../../math/SafeMath.sol"
+        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol"
       ],
       "versionPragmas": [
-        ">=0.6.0 <0.8.0"
+        ">=0.6.2"
       ],
       "artifacts": [
-        "ERC20"
+        "IVenue"
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@primitivefi\\contracts\\contracts\\option\\interfaces\\ITrader.sol": {
@@ -1206,10 +1019,198 @@
         "TraderLib"
       ]
     },
-    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IERC20.sol": {
-      "lastModificationDate": 1611208369551,
-      "contentHash": "3dd2250235bb04d17200d80e994aed9a",
-      "sourceName": "contracts/interfaces/IERC20.sol",
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IUniswapVenue.sol": {
+      "lastModificationDate": 1611448399359,
+      "contentHash": "5a3387ba6ca4df90a15f92135163a98b",
+      "sourceName": "contracts/interfaces/IUniswapVenue.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol",
+        "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol",
+        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "IUniswapVenue"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\venues\\UniswapVenue.sol": {
+      "lastModificationDate": 1611455450102,
+      "contentHash": "1fa96cc4e1357422d0596410444df2dc",
+      "sourceName": "contracts/venues/UniswapVenue.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol",
+        "../interfaces/IUniswapVenue.sol",
+        "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol",
+        "../interfaces/ICapitol.sol",
+        "../interfaces/IHouse.sol",
+        "../interfaces/IWETH.sol",
+        "../libraries/SafeMath.sol",
+        "../libraries/UniswapVenueLib.sol",
+        "../libraries/RouterLib.sol",
+        "../Venue.sol",
+        "../VirtualRouter.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "UniswapVenue"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\access\\Ownable.sol": {
+      "lastModificationDate": 1606935915953,
+      "contentHash": "38c56382c57a9e9dab92cee051155870",
+      "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "../GSN/Context.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.0 <0.8.0"
+      ],
+      "artifacts": [
+        "Ownable"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@openzeppelin\\contracts\\utils\\ReentrancyGuard.sol": {
+      "lastModificationDate": 1606935915960,
+      "contentHash": "1c60f58cee45c61469e1aea31e4dd879",
+      "sourceName": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.6.0 <0.8.0"
+      ],
+      "artifacts": [
+        "ReentrancyGuard"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\node_modules\\@uniswap\\v2-core\\contracts\\interfaces\\IUniswapV2Pair.sol": {
+      "lastModificationDate": 1593303259441,
+      "contentHash": "3fa31c3860f2b9585c3a98c64850829e",
+      "sourceName": "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol",
       "solcConfig": {
         "version": "0.6.2",
         "settings": {
@@ -1245,7 +1246,108 @@
         ">=0.5.0"
       ],
       "artifacts": [
-        "IERC20"
+        "IUniswapV2Pair"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\libraries\\UniswapVenueLib.sol": {
+      "lastModificationDate": 1611432593447,
+      "contentHash": "db5f1ce55ff2f0ffbabb3722f92221cf",
+      "sourceName": "contracts/libraries/UniswapVenueLib.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol",
+        "@primitivefi/contracts/contracts/option/interfaces/ITrader.sol",
+        "@primitivefi/contracts/contracts/option/libraries/TraderLib.sol",
+        "../interfaces/IWETH.sol",
+        "@openzeppelin/contracts/math/SafeMath.sol",
+        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol"
+      ],
+      "versionPragmas": [
+        "0.6.2"
+      ],
+      "artifacts": [
+        "UniswapVenueLib"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\VirtualRouter.sol": {
+      "lastModificationDate": 1611452291387,
+      "contentHash": "2883ac3110987e7967988ddd836b624e",
+      "sourceName": "contracts/VirtualRouter.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/SafeERC20.sol",
+        "@primitivefi/contracts/contracts/option/interfaces/IOption.sol",
+        "./interfaces/IERC20.sol",
+        "./interfaces/IPrimitiveRouter.sol",
+        "./interfaces/IWETH.sol",
+        "./Router.sol",
+        "./libraries/RouterLib.sol",
+        "./libraries/SafeMath.sol",
+        "./Virtualizer.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "VirtualRouter"
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IPrimitiveRouter.sol": {
@@ -1607,8 +1709,8 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\House.sol": {
-      "lastModificationDate": 1611455416741,
-      "contentHash": "e1ec994727554b9f1825924c9cf182ea",
+      "lastModificationDate": 1611520613651,
+      "contentHash": "d5a2a739da72abcd4ec361d8a6967773",
       "sourceName": "contracts/House.sol",
       "solcConfig": {
         "version": "0.6.2",
@@ -1663,8 +1765,8 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\extensions\\Accelerator.sol": {
-      "lastModificationDate": 1611448447840,
-      "contentHash": "437d664e367f3874afe3c1d169d86b34",
+      "lastModificationDate": 1611512665473,
+      "contentHash": "6627fef6d48671ad322694e01050d56a",
       "sourceName": "contracts/extensions/Accelerator.sol",
       "solcConfig": {
         "version": "0.6.2",
@@ -1746,6 +1848,52 @@
       ],
       "artifacts": [
         "IEnergy"
+      ]
+    },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Capitol.sol": {
+      "lastModificationDate": 1611442545432,
+      "contentHash": "9540e01e24785140e90373acea6efbe9",
+      "sourceName": "contracts/Capitol.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "./interfaces/IVenue.sol",
+        "./interfaces/ICapitol.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "Capitol"
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\extensions\\Energy.sol": {
