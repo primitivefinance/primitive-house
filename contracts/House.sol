@@ -188,6 +188,45 @@ contract House is Ownable, VirtualRouter, Accelerator {
         return debit[token][depositor];
     }
 
+    // ==== Options Management ====
+
+    /**
+     * @dev Mints virtual options to the receiver addresses.
+     */
+    function mintVirtualOptions(
+        address optionAddress,
+        uint256 quantity,
+        address longReceiver,
+        address shortReceiver
+    ) public isEndorsed(msg.sender) {
+        address receiver =
+            longReceiver == shortReceiver ? longReceiver : address(this);
+        address virtualOption = _virtualMint(optionAddress, quantity, receiver);
+        if (receiver == address(this)) {
+            IERC20(virtualOption).transfer(longReceiver, quantity);
+            uint256 shortQuantity =
+                RouterLib.getProportionalShortOptions(
+                    IOption(virtualOption),
+                    quantity
+                );
+            IERC20(IOption(virtualOption).redeemToken()).transfer(
+                shortReceiver,
+                shortQuantity
+            );
+        }
+    }
+
+    /**
+     * @dev Pulls short and long options from `msg.sender` and burns them.
+     */
+    function burnVirtualOptions(
+        address optionAddress,
+        uint256 quantity,
+        address receiver
+    ) public isEndorsed(msg.sender) {
+        address virtualOption = _virtualBurn(optionAddress, quantity, receiver);
+    }
+
     // ==== Execution ====
 
     // Calls the accelerator intermediary to execute a transaction with a venue on behalf of caller.

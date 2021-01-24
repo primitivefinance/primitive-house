@@ -562,6 +562,51 @@ contract VirtualRouter is Virtualizer, Router {
         return virtualOption;
     }
 
+    function _virtualBurn(
+        address optionAddress,
+        uint256 quantity,
+        address receiver
+    ) internal returns (address) {
+        IOption virtualOption = IOption(virtualOptions[address(optionToken)]);
+        // Calculate the quantity of redeemTokens that need to be burned. (What we mean by Implicit).
+        uint256 inputRedeems =
+            RouterLib.getProportionalShortOptions(optionToken, closeQuantity);
+
+        // Pull the virtual redeem tokens from the `msg.sender` and send them to the virtual option.
+        IERC20(virtualOption.redeemToken()).transferFrom(
+            msg.sender,
+            address(virtualOption),
+            inputRedeems
+        );
+
+        // If the option is not expired, need to pull long options too.
+        // Pull virtual long options from the `msg.sender` to the virtual option.
+        if (virtualOption.getExpiryTime() >= now) {
+            IERC20(address(virtualOption)).transferFrom(
+                msg.sender,
+                address(virtualOption),
+                closeQuantity
+            );
+        }
+
+        // Exercise the virtual options to this contract.
+        (uint256 inRedeems, uint256 inOptions, uint256 outUnderlyings) =
+            virtualOption.closeOptions(address(this));
+
+        address realUnderlying = optionToken.getUnderlyingTokenAddress();
+
+        // Burn the virtual underlying tokens received from the closed virtual option.
+        ReserveData memory virtualUnderlyingReserve = _reserves[realUnderlying];
+
+        // Burn the virtual underlying tokens from this contract.
+        virtualUnderlyingReserve.virtualToken.burn(
+            address(this),
+            closeQuantity
+        );
+        emit Closed(msg.sender, address(virtualOption), closeQuantity);
+        return virtualOption;
+    }
+
     function virtualExercise(
         address optionAddress,
         uint256 quantity,
