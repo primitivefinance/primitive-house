@@ -567,10 +567,13 @@ contract VirtualRouter is Virtualizer, Router {
         uint256 quantity,
         address receiver
     ) internal returns (address) {
-        IOption virtualOption = IOption(virtualOptions[address(optionToken)]);
+        IOption virtualOption = IOption(virtualOptions[optionAddress]);
         // Calculate the quantity of redeemTokens that need to be burned. (What we mean by Implicit).
         uint256 inputRedeems =
-            RouterLib.getProportionalShortOptions(optionToken, closeQuantity);
+            RouterLib.getProportionalShortOptions(
+                IOption(optionAddress),
+                quantity
+            );
 
         // Pull the virtual redeem tokens from the `msg.sender` and send them to the virtual option.
         IERC20(virtualOption.redeemToken()).transferFrom(
@@ -585,7 +588,7 @@ contract VirtualRouter is Virtualizer, Router {
             IERC20(address(virtualOption)).transferFrom(
                 msg.sender,
                 address(virtualOption),
-                closeQuantity
+                quantity
             );
         }
 
@@ -593,18 +596,16 @@ contract VirtualRouter is Virtualizer, Router {
         (uint256 inRedeems, uint256 inOptions, uint256 outUnderlyings) =
             virtualOption.closeOptions(address(this));
 
-        address realUnderlying = optionToken.getUnderlyingTokenAddress();
+        address realUnderlying =
+            IOption(optionAddress).getUnderlyingTokenAddress();
 
         // Burn the virtual underlying tokens received from the closed virtual option.
         ReserveData memory virtualUnderlyingReserve = _reserves[realUnderlying];
 
         // Burn the virtual underlying tokens from this contract.
-        virtualUnderlyingReserve.virtualToken.burn(
-            address(this),
-            closeQuantity
-        );
-        emit Closed(msg.sender, address(virtualOption), closeQuantity);
-        return virtualOption;
+        virtualUnderlyingReserve.virtualToken.burn(address(this), quantity);
+        emit Closed(msg.sender, address(virtualOption), quantity);
+        return address(virtualOption);
     }
 
     function virtualExercise(
