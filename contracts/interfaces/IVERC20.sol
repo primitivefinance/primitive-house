@@ -1,7 +1,7 @@
 pragma solidity >=0.6.2;
 
 interface IVERC20 {
-    function initialize(address asset, address houseAddress) external;
+    /* function initialize(address asset, address houseAddress) external; */
 
     function mint(address to, uint256 quantity) external returns (bool);
 

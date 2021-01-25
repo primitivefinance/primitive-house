@@ -36,6 +36,7 @@ contract House is Ownable, VirtualRouter, Accelerator {
         mapping(address => uint256) balanceOf;
     }
 
+    event Executed(address indexed from, address indexed venue);
     // liquidity
     event Leveraged(
         address indexed depositor,
@@ -238,5 +239,7 @@ contract House is Ownable, VirtualRouter, Accelerator {
     {
         CALLER = msg.sender;
         accelerator.executeCall(venue, params);
+        emit Executed(msg.sender, venue);
+        return true;
     }
 }

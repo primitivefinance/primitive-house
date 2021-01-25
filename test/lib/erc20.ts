@@ -25,6 +25,18 @@ export const deployTokens = async (signer: Signer, quantity: number, totalSupply
   return tokens
 }
 
+export const deployVirtualTokens = async (signer: Signer, tokens: string[], house: string, totalSupply?: BigNumber) => {
+  const amount = ethers.utils.parseEther('1000000000')
+  let virtualTokens: Contract[] = []
+
+  for (let i = 0; i < tokens.length; i++) {
+    let token = await deploy('VERC20', { from: signer, args: [tokens[i], house, totalSupply ? totalSupply : amount] })
+    virtualTokens.push(token)
+  }
+
+  return virtualTokens
+}
+
 export const batchApproval = async (
   arrayOfAddresses: string[],
   arrayOfTokens: Contract[],

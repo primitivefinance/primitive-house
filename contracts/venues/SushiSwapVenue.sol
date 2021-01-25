@@ -20,6 +20,8 @@ import {IWETH} from "../interfaces/IWETH.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 import {RouterLib} from "../libraries/RouterLib.sol";
 
+import "hardhat/console.sol";
+
 contract SushiSwapVenue is Venue, ISushiSwapVenue {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
@@ -230,13 +232,16 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
                 amountBMin,
                 deadline
             );
+        console.log("adding liquidity");
         // Adds liquidity to Uniswap V2 Pair and returns liquidity shares to this contract.
         (uint256 amountA, uint256 amountB, uint256 liquidity) =
             _addLiquidity(optionAddress, params);
 
+        console.log("lending single");
         // Add as collateral to the House.
         _lendSingle(pair, liquidity);
 
+        console.log("checking for dust");
         // check for dust
         _takeDust(IOption(optionAddress).getUnderlyingTokenAddress());
         _takeDust(IOption(optionAddress).redeemToken());
@@ -264,7 +269,12 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
     {
         address underlyingToken =
             IOption(optionAddress).getUnderlyingTokenAddress();
-        address shortToken = IOption(optionAddress).redeemToken();
+        (, , , address shortToken) = getVirtualAssets(optionAddress);
+
+        console.log("checking approval for short");
+        checkApproved(shortToken, address(router));
+
+        console.log("getting tokens");
         // Get tokens
         _convertETH(); // ETH - > WETH
         _mintOptions( // Add Long + Short
@@ -288,6 +298,7 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
             "Venue: SHORT_IMBALANCE"
         );
 
+        console.log("calling add liquidity");
         // Add liquidity, get LP tokens
         router.addLiquidity(
             shortToken, // short option

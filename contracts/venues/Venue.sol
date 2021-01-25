@@ -127,4 +127,22 @@ contract Venue {
             IERC20(token).transfer(house.CALLER(), bal);
         }
     }
+
+    // ==== View ====
+
+    function getVirtualAssets(address optionAddress)
+        public
+        view
+        returns (
+            address,
+            address,
+            address,
+            address
+        )
+    {
+        IOption virtualOption = IOption(house.virtualOptions(optionAddress));
+        (address under, address strike, address short) =
+            virtualOption.getAssetAddresses();
+        return (address(virtualOption), under, strike, short);
+    }
 }

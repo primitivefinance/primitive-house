@@ -11,10 +11,6 @@ contract Accelerator {
     {
         (bool success, bytes memory returnData) =
             target.call{value: msg.value}(params);
-        require(
-            success &&
-                (returnData.length == 0 || abi.decode(returnData, (bool))),
-            "Accelerator: EXECUTION_FAIL"
-        );
+        require(success, "Accelerator: EXECUTION_FAIL");
     }
 }
