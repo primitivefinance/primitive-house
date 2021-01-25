@@ -2,7 +2,7 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Accelerator.sol": {
-      "lastModificationDate": 1611521517632,
+      "lastModificationDate": 1611528077858,
       "contentHash": "de86035cf648964a90c8a2f34affa96b",
       "sourceName": "contracts/Accelerator.sol",
       "solcConfig": {
@@ -44,8 +44,8 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\House.sol": {
-      "lastModificationDate": 1611522220674,
-      "contentHash": "5f701cc2b02a3232ec322be022f39681",
+      "lastModificationDate": 1611528077859,
+      "contentHash": "3f1895b23060209638026251e4440b86",
       "sourceName": "contracts/House.sol",
       "solcConfig": {
         "version": "0.6.2",
@@ -228,7 +228,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\ICapitol.sol": {
-      "lastModificationDate": 1611522342848,
+      "lastModificationDate": 1611528077861,
       "contentHash": "6f6d9ef48499c647ce94d0e1cad2eaf1",
       "sourceName": "contracts/interfaces/ICapitol.sol",
       "solcConfig": {
@@ -312,7 +312,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IVERC20.sol": {
-      "lastModificationDate": 1611454374052,
+      "lastModificationDate": 1611528077863,
       "contentHash": "2bd1e57326c8dbc644ec9ba9f95069a6",
       "sourceName": "contracts/interfaces/IVERC20.sol",
       "solcConfig": {
@@ -354,7 +354,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IWETH.sol": {
-      "lastModificationDate": 1611285784426,
+      "lastModificationDate": 1611528077863,
       "contentHash": "80ef32b1f159bdbe9acf0c84fc43c579",
       "sourceName": "contracts/interfaces/IWETH.sol",
       "solcConfig": {
@@ -396,7 +396,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\libraries\\RouterLib.sol": {
-      "lastModificationDate": 1611432456654,
+      "lastModificationDate": 1611528077864,
       "contentHash": "f539657643249412e9dafcc1216cca47",
       "sourceName": "contracts/libraries/RouterLib.sol",
       "solcConfig": {
@@ -486,8 +486,8 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\VirtualRouter.sol": {
-      "lastModificationDate": 1611522064288,
-      "contentHash": "8b5ae7a422f9ab3c6a6076b1a087dc90",
+      "lastModificationDate": 1611529783693,
+      "contentHash": "eaae153cad53b4c0aa76bfa3bffe10ee",
       "sourceName": "contracts/VirtualRouter.sol",
       "solcConfig": {
         "version": "0.6.2",
@@ -888,7 +888,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Router.sol": {
-      "lastModificationDate": 1611452159197,
+      "lastModificationDate": 1611528077860,
       "contentHash": "c8b8d796d64a5eba771788e570d6c711",
       "sourceName": "contracts/Router.sol",
       "solcConfig": {
@@ -933,7 +933,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Virtualizer.sol": {
-      "lastModificationDate": 1611450372288,
+      "lastModificationDate": 1611528077861,
       "contentHash": "24acd73a66e080d0e202e9bb7ac955fb",
       "sourceName": "contracts/Virtualizer.sol",
       "solcConfig": {
@@ -1026,7 +1026,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IPrimitiveERC20.sol": {
-      "lastModificationDate": 1611449745368,
+      "lastModificationDate": 1611528077862,
       "contentHash": "218f25c02e5a4b68cfaa5a94e80e362e",
       "sourceName": "contracts/interfaces/IPrimitiveERC20.sol",
       "solcConfig": {
@@ -1068,7 +1068,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\VERC20.sol": {
-      "lastModificationDate": 1611454378706,
+      "lastModificationDate": 1611528077860,
       "contentHash": "c99ef36e1ef2892cf30289ab8343d8e1",
       "sourceName": "contracts/VERC20.sol",
       "solcConfig": {
@@ -1115,7 +1115,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\IHouse.sol": {
-      "lastModificationDate": 1611520574054,
+      "lastModificationDate": 1611528077862,
       "contentHash": "e58e2b1aa29d863b961b6864bffd6810",
       "sourceName": "contracts/interfaces/IHouse.sol",
       "solcConfig": {
@@ -1157,7 +1157,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\PrimitiveERC20.sol": {
-      "lastModificationDate": 1611449762852,
+      "lastModificationDate": 1611528077859,
       "contentHash": "159458c92e1ee7a8dc58ecf4a666727b",
       "sourceName": "contracts/PrimitiveERC20.sol",
       "solcConfig": {
@@ -1201,8 +1201,52 @@
         "PrimitiveERC20"
       ]
     },
+    "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\test\\TestERC20.sol": {
+      "lastModificationDate": 1611530275969,
+      "contentHash": "110f4437c4b34537da78c60c094233e2",
+      "sourceName": "contracts/test/TestERC20.sol",
+      "solcConfig": {
+        "version": "0.6.2",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "devdoc",
+                "userdoc",
+                "storageLayout",
+                "evm.gasEstimates"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          },
+          "metadata": {
+            "useLiteralContent": true
+          }
+        }
+      },
+      "imports": [
+        "../PrimitiveERC20.sol"
+      ],
+      "versionPragmas": [
+        ">=0.5.12"
+      ],
+      "artifacts": [
+        "TestERC20"
+      ]
+    },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\venues\\SushiSwapVenue.sol": {
-      "lastModificationDate": 1611522263280,
+      "lastModificationDate": 1611528077865,
       "contentHash": "6e2b3a45c2abcede56df64feea30309e",
       "sourceName": "contracts/venues/SushiSwapVenue.sol",
       "solcConfig": {
@@ -1253,7 +1297,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\interfaces\\ISushiSwapVenue.sol": {
-      "lastModificationDate": 1611520619300,
+      "lastModificationDate": 1611528077863,
       "contentHash": "04c78b578967e0ae3a8d2d7099c2e800",
       "sourceName": "contracts/interfaces/ISushiSwapVenue.sol",
       "solcConfig": {
@@ -1299,7 +1343,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\venues\\Venue.sol": {
-      "lastModificationDate": 1611521645124,
+      "lastModificationDate": 1611528077865,
       "contentHash": "2ecc544eae217b8f33e4fda600b3084f",
       "sourceName": "contracts/venues/Venue.sol",
       "solcConfig": {
@@ -1475,7 +1519,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\Capitol.sol": {
-      "lastModificationDate": 1611522319624,
+      "lastModificationDate": 1611528077858,
       "contentHash": "9eb5ff9bbb74d46e45f4198371f76fa5",
       "sourceName": "contracts/Capitol.sol",
       "solcConfig": {
@@ -1520,7 +1564,7 @@
       ]
     },
     "C:\\Users\\alexa\\OneDrive\\Documents\\Master\\Blockchain\\primitive-house\\contracts\\test\\SushiSwapVenueTest.sol": {
-      "lastModificationDate": 1611521802858,
+      "lastModificationDate": 1611528077864,
       "contentHash": "3607062c905e2a1f80a0f085890b667c",
       "sourceName": "contracts/test/SushiSwapVenueTest.sol",
       "solcConfig": {
