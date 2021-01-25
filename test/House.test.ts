@@ -13,6 +13,7 @@ describe('House', function () {
   let signers: SignerWithAddress[]
   let weth: Contract
   let house: Contract
+  let capitol: Contract
   let signer: SignerWithAddress
   let tokens: Contract[], comp: Contract, dai: Contract, wbtc: Contract, vcomp: Contract, vdai: Contract
   let option: Contract, redeem: Contract, virtualTokens: Contract[], virtualOption: Contract, virtualRedeem: Contract
@@ -45,33 +46,39 @@ describe('House', function () {
   }
 
   before(async function () {
+    // 1. get signers
     signers = await ethers.getSigners()
     signer = signers[0]
 
-    // tokens
+    // 2. get weth, erc-20 tokens
     weth = await deployWeth(signer)
     tokens = await deployTokens(signer, 2)
     ;[comp, dai] = tokens
 
-    // option params
+    // 3. select option params
     underlying = comp
     strike = dai
     base = parseEther('1')
     quote = parseEther('100')
     expiry = '1690868800'
 
-    // primitive
-    house = await deploy('House', { from: signers[0], args: [weth.address, AddressZero, AddressZero] })
+    // 4. deploy capitol, house, primitive option + redeem
+    capitol = await deploy('Capitol', { from: signer, args: [] })
+    house = await deploy('House', { from: signers[0], args: [weth.address, AddressZero, capitol.address] })
     ;[option, redeem] = await deployPrimitiveOption(signer, underlying.address, strike.address, base, quote, expiry)
-    sushiswapVenue = await deploy('SushiSwapVenue', { args: [weth.address, house.address, AddressZero] })
-
-    // uniswap
+    // 5. deploy external contracts for venue (sushiswap)
     ;[factory, router] = await deployUniswap(signer, weth.address)
+    // 6. deploy venue and add it to capitol
+    sushiswapVenue = await deploy('SushiSwapVenueTest', {
+      args: [weth.address, house.address, capitol.address, router.address, factory.address],
+    })
+    await capitol.addVenue(sushiswapVenue.address, 'SushiSwap', '0.0.1', true)
 
-    // virtual tokens
+    // 7. deploy virtual versions of the erc-20 tokens
     log('deploying virtuals')
     virtualTokens = await deployVirtualTokens(signer, getTokenAddresses(), house.address)
     ;[vcomp, vdai] = virtualTokens
+    // 8. issue the virtual tokens to the house
     log('issuing virtuals')
     virtualTokens.map(async (token, i) => {
       const virtualAsset = token.address
@@ -81,6 +88,7 @@ describe('House', function () {
     let vunderlying = vcomp
     let vstrike = vdai
     log('deploying voptions')
+    // 9. deploy the virtual option + redeem tokens
     ;[virtualOption, virtualRedeem] = await deployPrimitiveOption(
       signer,
       vunderlying.address,
@@ -89,14 +97,16 @@ describe('House', function () {
       quote,
       expiry
     )
-
+    // 10. issue the virtual option to the house
     await house.issueVirtualOption(option.address, virtualOption.address)
 
     // end state is virtual assets for each asset, underlying & strike, virtual option + virtual redeem
 
-    // approve all tokens and contract
+    // 11. approve all tokens and contract
     await batchApproval([house.address, router.address], [underlying, strike, option, redeem], [signer])
-    await factory.createPair(underlying.address, redeem.address)
+
+    // 12. create the pair for the real underlying token, and the virtual redeem token.
+    await factory.createPair(underlying.address, virtualRedeem.address)
   })
 
   describe('House.constructor', function () {
@@ -109,16 +119,12 @@ describe('House', function () {
       expect(await house.registry()).to.eq(AddressZero)
     })
     it('capitol()', async () => {
-      expect(await house.capitol()).to.eq(AddressZero)
+      expect(await house.capitol()).to.eq(capitol.address)
     })
   })
 
   describe('Venue.constructor', function () {
-    beforeEach(async function () {
-      sushiswapVenue = await deploy('SushiSwapVenueTest', {
-        args: [weth.address, house.address, AddressZero, router.address, factory.address],
-      })
-    })
+    beforeEach(async function () {})
 
     it('weth()', async () => {
       expect(await sushiswapVenue.weth()).to.eq(weth.address)
@@ -127,7 +133,7 @@ describe('House', function () {
       expect(await sushiswapVenue.house()).to.eq(house.address)
     })
     it('capitol()', async () => {
-      expect(await sushiswapVenue.capitol()).to.eq(AddressZero)
+      expect(await sushiswapVenue.capitol()).to.eq(capitol.address)
     })
   })
 
@@ -145,9 +151,9 @@ describe('House', function () {
 
   describe('House.execute', function () {
     beforeEach(async function () {
-      house = await deploy('House', { from: signers[0], args: [weth.address, AddressZero, AddressZero] })
-      await batchApproval([house.address], tokens, [signer])
-      await batchApproval([house.address], [option, redeem], [signer])
+      //house = await deploy('House', { from: signers[0], args: [weth.address, AddressZero, AddressZero] })
+      //await batchApproval([house.address], tokens, [signer])
+      //await batchApproval([house.address], [option, redeem], [signer])
     })
 
     it('setTest', async () => {

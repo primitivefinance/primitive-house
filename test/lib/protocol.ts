@@ -30,6 +30,7 @@ export const deployPrimitiveOption = async (signer: SignerWithAddress, ...args: 
   await option.initialize(...args)
   const redeem = await deployContract(signer, Redeem, [], DEFAULT_DEPLOY)
   await redeem.initialize(signer.address, option.address)
+  await option.initRedeemToken(redeem.address)
 
   return [option, redeem]
 }

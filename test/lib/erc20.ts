@@ -30,7 +30,7 @@ export const deployVirtualTokens = async (signer: Signer, tokens: string[], hous
   let virtualTokens: Contract[] = []
 
   for (let i = 0; i < tokens.length; i++) {
-    let token = await deploy('VERC20', { from: signer, args: [tokens[i], house, totalSupply ? totalSupply : amount] })
+    let token = await deploy('VERC20', { from: signer, args: [tokens[i], house] })
     virtualTokens.push(token)
   }
 

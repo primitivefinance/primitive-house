@@ -69,6 +69,17 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
         return pair;
     }
 
+    function getApprovedPool(address under, address short)
+        public
+        returns (address)
+    {
+        address pair = factory.getPair(under, short);
+        checkApproved(under, address(router));
+        checkApproved(short, address(router));
+        checkApproved(pair, address(router));
+        return pair;
+    }
+
     // User will enter pool with various amounts of leverage.
 
     /**
@@ -224,7 +235,10 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
             uint256
         )
     {
-        address pair = pool(optionAddress);
+        address option = optionAddress;
+        address under = IOption(option).getUnderlyingTokenAddress();
+        (, , , address short) = getVirtualAssets(option);
+        address pair = factory.getPair(under, short);
         AddLiquidityParams memory params =
             AddLiquidityParams(
                 quantityOptions,
@@ -235,7 +249,7 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
         console.log("adding liquidity");
         // Adds liquidity to Uniswap V2 Pair and returns liquidity shares to this contract.
         (uint256 amountA, uint256 amountB, uint256 liquidity) =
-            _addLiquidity(optionAddress, params);
+            _addLiquidity(option, params);
 
         console.log("lending single");
         // Add as collateral to the House.
@@ -243,8 +257,8 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
 
         console.log("checking for dust");
         // check for dust
-        _takeDust(IOption(optionAddress).getUnderlyingTokenAddress());
-        _takeDust(IOption(optionAddress).redeemToken());
+        _takeDust(under);
+        _takeDust(short);
         _takeWETHDust();
 
         return (amountA, amountB, liquidity);
@@ -271,18 +285,20 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
             IOption(optionAddress).getUnderlyingTokenAddress();
         (, , , address shortToken) = getVirtualAssets(optionAddress);
 
-        console.log("checking approval for short");
+        console.log("checking approval for short", shortToken);
         checkApproved(shortToken, address(router));
 
-        console.log("getting tokens");
+        console.log("converting eth");
         // Get tokens
         _convertETH(); // ETH - > WETH
+        console.log("minting options");
         _mintOptions( // Add Long + Short
             optionAddress,
             params.quantityOptions,
             address(this),
             address(this)
         );
+        console.log("taking underlying tokens");
         _takeTokens(underlyingToken, params.amountBMax); // Add underlying
 
         uint256 shortOptions =
@@ -291,7 +307,7 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
                 params.quantityOptions
             );
 
-        address pair = getApprovedPool(optionAddress);
+        address pair = getApprovedPool(underlyingToken, shortToken);
 
         require(
             shortOptions == IERC20(shortToken).balanceOf(address(this)),
