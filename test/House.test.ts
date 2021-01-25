@@ -7,6 +7,7 @@ import { deploy } from '../scripts/deploy'
 import { deployTokens, deployWeth, batchApproval, deployVirtualTokens } from './lib/erc20'
 import { deployUniRouter, deployUniswap, deployPrimitiveOption } from './lib/protocol'
 import { log } from './lib/utils'
+import generateReport from './lib/table/generateReport'
 const { AddressZero } = ethers.constants
 
 describe('House', function () {
@@ -107,6 +108,11 @@ describe('House', function () {
 
     // 12. create the pair for the real underlying token, and the virtual redeem token.
     await factory.createPair(underlying.address, virtualRedeem.address)
+
+    let contractNames: string[] = ['House']
+    let contracts = [house]
+    let addresses = [signer.address]
+    await generateReport(contractNames, contracts, tokens, addresses)
   })
 
   describe('House.constructor', function () {
