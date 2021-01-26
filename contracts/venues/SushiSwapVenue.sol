@@ -77,6 +77,9 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
         checkApproved(under, address(router));
         checkApproved(short, address(router));
         checkApproved(pair, address(router));
+        checkApproved(under, address(house));
+        checkApproved(short, address(house));
+        checkApproved(pair, address(house));
         return pair;
     }
 
@@ -107,38 +110,51 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
 
         uint256[] memory liquidityAmounts = new uint256[](optionsLength);
         address[] memory pairTokens = new address[](optionsLength);
+        {
+            uint256[] memory maxAmounts_ = new uint256[](maxAmountsLength);
+            maxAmounts_ = maxAmounts;
+            uint256[] memory minAmounts_ = new uint256[](minAmountsLength);
+            minAmounts_ = minAmounts;
+            console.log("entering for loop");
+            for (uint256 i = 0; i < optionsLength; i++) {
+                address optionAddress = options[i];
+                address under =
+                    IOption(optionAddress).getUnderlyingTokenAddress();
+                (, , , address short) = getVirtualAssets(optionAddress);
+                address pair = factory.getPair(under, short);
+                uint256 optionsToMint = maxAmounts_[i];
+                uint256 underlyingDeposit = maxAmounts_[i + 1];
+                uint256 shortOptionsToMint =
+                    RouterLib.getProportionalShortOptions(
+                        IOption(optionAddress),
+                        optionsToMint
+                    );
+                console.log("checking min amounts");
+                require(
+                    shortOptionsToMint == minAmounts_[i],
+                    "UniswapVenue: SHORT_OPTIONS_INPUT"
+                );
+                uint256 minUnderlyingDeposit = minAmounts_[i + 1];
+                AddLiquidityParams memory params =
+                    AddLiquidityParams(
+                        optionsToMint,
+                        underlyingDeposit,
+                        minUnderlyingDeposit,
+                        now
+                    );
+                console.log("adding liquidity internally");
+                // Adds liquidity to Uniswap V2 Pair and returns liquidity shares to this contract.
+                (, , uint256 liquidity) = _addLiquidity(optionAddress, params);
+                // Inputs for lending multiple tokens
+                console.log("liquidity added:", liquidity);
+                liquidityAmounts[i] = liquidity;
+                pairTokens[i] = pair;
 
-        for (uint256 i = 0; i < optionsLength; i++) {
-            address optionAddress = options[i];
-            address pair = pool(optionAddress);
-            uint256 optionsToMint = maxAmounts[i];
-            uint256 underlyingDeposit = maxAmounts[i + 1];
-            uint256 shortOptionsToMint =
-                RouterLib.getProportionalShortOptions(
-                    IOption(optionAddress),
-                    optionsToMint
-                );
-            require(
-                shortOptionsToMint == minAmounts[i],
-                "UniswapVenue: SHORT_OPTIONS_INPUT"
-            );
-            uint256 minUnderlyingDeposit = minAmounts[i + 1];
-            AddLiquidityParams memory params =
-                AddLiquidityParams(
-                    optionsToMint,
-                    underlyingDeposit,
-                    minUnderlyingDeposit,
-                    now
-                );
-            // Adds liquidity to Uniswap V2 Pair and returns liquidity shares to this contract.
-            (uint256 amountA, uint256 amountB, uint256 liquidity) =
-                _addLiquidity(optionAddress, params);
-            // Inputs for lending multiple tokens
-            liquidityAmounts[i] = liquidity;
-            pairTokens[i] = pair;
-            // check for dust
-            _takeDust(IOption(optionAddress).getUnderlyingTokenAddress());
-            _takeDust(IOption(optionAddress).redeemToken());
+                console.log("taking dust");
+                // check for dust
+                _takeDust(under);
+                _takeDust(short);
+            }
         }
         // Add as collateral to the House.
         _lendMultiple(pairTokens, liquidityAmounts);
@@ -173,11 +189,14 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
         address[] memory liquidityPools = new address[](optionsLength);
         for (uint256 i = 0; i < optionsLength; i++) {
             address optionAddress = options[i];
-            address pair = pool(optionAddress);
+            address under = IOption(optionAddress).getUnderlyingTokenAddress();
+            (, , , address short) = getVirtualAssets(optionAddress);
+            address pair = factory.getPair(under, short);
             liquidityPools[i] = pair;
         }
 
-        _borrowMultiple(liquidityPools, quantities);
+        console.log("borrowing multiple");
+        _borrowCollateral(liquidityPools, quantities);
 
         for (uint256 i = 0; i < optionsLength; i++) {
             address optionAddress = options[i];
@@ -193,6 +212,7 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
                     minimumUnderlyingTokens,
                     deadline
                 );
+            console.log("removing liquidity internally");
             _removeLiquidity(optionAddress, params);
         }
 
@@ -238,7 +258,7 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
         address option = optionAddress;
         address under = IOption(option).getUnderlyingTokenAddress();
         (, , , address short) = getVirtualAssets(option);
-        address pair = factory.getPair(under, short);
+        address pair = getApprovedPool(under, short);
         AddLiquidityParams memory params =
             AddLiquidityParams(
                 quantityOptions,
@@ -251,7 +271,7 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
         (uint256 amountA, uint256 amountB, uint256 liquidity) =
             _addLiquidity(option, params);
 
-        console.log("lending single");
+        console.log("lending single", liquidity);
         // Add as collateral to the House.
         _lendSingle(pair, liquidity);
 
@@ -314,18 +334,23 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
             "Venue: SHORT_IMBALANCE"
         );
 
-        console.log("calling add liquidity");
-        // Add liquidity, get LP tokens
-        router.addLiquidity(
-            shortToken, // short option
-            underlyingToken, // underlying tokens
-            IERC20(shortToken).balanceOf(address(this)), // quantity of short options to deposit
-            IERC20(underlyingToken).balanceOf(address(this)), // max quantity of underlying tokens to deposit
-            shortOptions, // min quantity of short options = short options (adding exact short options)
-            params.amountBMin, // min quantity of underlying to deposit
-            address(this), // receiving address
-            now //params.deadline
+        console.log(
+            "calling add liquidity",
+            IERC20(shortToken).balanceOf(address(this)),
+            IERC20(underlyingToken).balanceOf(address(this))
         );
+        // Add liquidity, get LP tokens
+        return
+            router.addLiquidity(
+                shortToken, // short option
+                underlyingToken, // underlying tokens
+                IERC20(shortToken).balanceOf(address(this)), // quantity of short options to deposit
+                IERC20(underlyingToken).balanceOf(address(this)), // max quantity of underlying tokens to deposit
+                shortOptions, // min quantity of short options = short options (adding exact short options)
+                params.amountBMin, // min quantity of underlying to deposit
+                address(this), // receiving address
+                now //params.deadline
+            );
     }
 
     struct RemoveLiquidityParams {
@@ -371,23 +396,30 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
         address optionAddress,
         RemoveLiquidityParams memory params
     ) internal returns (uint256, uint256) {
-        address pair = getApprovedPool(optionAddress);
+        address underlyingToken =
+            IOption(optionAddress).getUnderlyingTokenAddress();
+        (address vOption, , , address shortToken) =
+            getVirtualAssets(optionAddress);
+
+        console.log("checking approval for short", shortToken);
+        checkApproved(shortToken, address(router));
         IOption optionToken = IOption(optionAddress);
-        address redeemToken = optionToken.redeemToken();
-        address underlyingTokenAddress =
-            optionToken.getUnderlyingTokenAddress();
 
         uint256 amountAMin = params.amountAMin;
         uint256 amountBMin = params.amountBMin;
 
         // When liquidity is added, a depositor gets 2x effective leverage. Calculate withdraw with this in mind.
         uint256 actualLiquidity = params.liquidity;
+        address pair = getApprovedPool(underlyingToken, shortToken);
+
+        console.log("calling remove liquidity to router");
+        console.log(IERC20(pair).balanceOf(address(this)), actualLiquidity);
 
         // Remove liquidity from Uniswap V2 pool to receive the reserve tokens (shortOptionTokens + UnderlyingTokens).
         (uint256 shortTokensWithdrawn, uint256 underlyingTokensWithdrawn) =
             router.removeLiquidity(
-                redeemToken,
-                underlyingTokenAddress,
+                shortToken,
+                underlyingToken,
                 actualLiquidity,
                 amountAMin,
                 amountBMin,
@@ -402,27 +434,32 @@ contract SushiSwapVenue is Venue, ISushiSwapVenue {
                 optionToken,
                 shortTokensWithdrawn
             );
+        //console.log("taking long options");
+        //_takeTokens(vOption, requiredLongOptions); // Add options
 
+        checkApproved(vOption, address(house));
+        console.log(
+            "burning options",
+            IERC20(vOption).balanceOf(address(this))
+        );
         // Check the required longOptionTokens balance
         _burnOptions(optionAddress, requiredLongOptions, address(this));
 
+        console.log("checking invariants amts");
         // Check balances against min Amounts
         uint256 underlyingBalance =
-            IERC20(underlyingTokenAddress).balanceOf(address(this));
-        uint256 shortBalance = IERC20(redeemToken).balanceOf(address(this));
+            IERC20(underlyingToken).balanceOf(address(this));
+        uint256 shortBalance = IERC20(shortToken).balanceOf(address(this));
+        console.log("under invariant");
         require(
             underlyingBalance >= underlyingTokensWithdrawn,
             "Venue: UNDERLYING_AMT"
         );
-        require(shortBalance >= shortTokensWithdrawn, "Venue: SHORT_AMT");
-        require(
-            IERC20(pair).balanceOf(address(this)) >= actualLiquidity,
-            "Venue: LIQUIDITY_AMT"
-        );
 
+        console.log("taking dust");
         // Send out tokens in this contract.
         _takeDust(pair);
-        _takeDust(underlyingTokenAddress);
+        _takeDust(underlyingToken);
         _takeWETHDust();
 
         return (underlyingBalance, shortBalance);

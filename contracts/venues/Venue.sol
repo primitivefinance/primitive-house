@@ -116,6 +116,13 @@ contract Venue {
         house.removeTokens(house.CALLER(), tokens, amounts);
     }
 
+    function _borrowCollateral(
+        address[] memory tokens,
+        uint256[] memory amounts
+    ) internal {
+        house.removeTokens(address(this), tokens, amounts);
+    }
+
     // Pulls tokens from user and sends them to the house.
     function _takeTokens(address token, uint256 quantity) internal {
         if (quantity > 0) {

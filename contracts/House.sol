@@ -28,6 +28,8 @@ import {RouterLib} from "./libraries/RouterLib.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {VirtualRouter} from "./VirtualRouter.sol";
 
+import "hardhat/console.sol";
+
 contract House is Ownable, VirtualRouter, Accelerator {
     /* using SafeERC20 for IERC20; */
     using SafeMath for uint256;
@@ -94,8 +96,10 @@ contract House is Ownable, VirtualRouter, Accelerator {
             // Pull tokens from depositor.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
+            console.log("transferFrom venue to house", quantity);
             IERC20(asset).transferFrom(msg.sender, address(this), quantity);
         }
+        console.log("internal add tokens to house");
         return _addTokens(depositor, tokens, amounts, false);
     }
 
@@ -115,11 +119,13 @@ contract House is Ownable, VirtualRouter, Accelerator {
             if (isDebit) {
                 debit[asset][depositor] = debit[asset][depositor].add(quantity);
             } else {
+                console.log(quantity);
                 credit[asset][depositor] = credit[asset][depositor].add(
                     quantity
                 );
             }
         }
+        console.log(depositor);
         emit CollateralDeposited(depositor, tokens, amounts);
         return true;
     }
@@ -135,12 +141,14 @@ contract House is Ownable, VirtualRouter, Accelerator {
         uint256[] memory amounts
     ) public returns (bool) {
         // Remove balances from state.
-        _removeTokens(withdrawee, tokens, amounts, true);
+        console.log("calling remove tokens");
+        _removeTokens(CALLER, tokens, amounts, false);
         uint256 tokensLength = tokens.length;
         for (uint256 i = 0; i < tokensLength; i++) {
             // Push tokens to withdrawee.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
+            console.log("transferring tokens to withdrawee");
             IERC20(asset).transfer(withdrawee, quantity);
         }
         return true;

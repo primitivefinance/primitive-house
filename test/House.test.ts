@@ -1,7 +1,7 @@
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address'
 import { expect } from 'chai'
-import { BigNumber, Contract } from 'ethers'
-import { parseEther } from 'ethers/lib/utils'
+import { BigNumber, BigNumberish, Contract } from 'ethers'
+import { parseEther, formatEther } from 'ethers/lib/utils'
 import { ethers, waffle } from 'hardhat'
 import { deploy } from '../scripts/deploy'
 import { deployTokens, deployWeth, batchApproval, deployVirtualTokens } from './lib/erc20'
@@ -104,7 +104,11 @@ describe('House', function () {
     // end state is virtual assets for each asset, underlying & strike, virtual option + virtual redeem
 
     // 11. approve all tokens and contract
-    await batchApproval([house.address, router.address], [underlying, strike, option, redeem], [signer])
+    await batchApproval(
+      [house.address, router.address],
+      [underlying, strike, option, redeem, virtualOption, virtualRedeem, vcomp, vdai],
+      [signer]
+    )
 
     // 12. create the pair for the real underlying token, and the virtual redeem token.
     await factory.createPair(underlying.address, virtualRedeem.address)
@@ -179,6 +183,38 @@ describe('House', function () {
         quantity,
         quantity,
         '0',
+        signer.address,
+        deadline,
+      ])
+      await expect(house.execute(venue, params)).to.emit(house, 'Executed').withArgs(signer.address, venue)
+    })
+
+    it('deposit', async () => {
+      let depositor: string = signer.address
+      let venue: string = sushiswapVenue.address
+      let quantity: BigNumber = parseEther('1')
+      let params: any = sushiswapVenue.interface.encodeFunctionData('deposit', [
+        [option.address],
+        [quantity, quantity],
+        [quantity.mul(quote).div(base), quantity],
+        signer.address,
+        deadline,
+      ])
+      await expect(house.execute(venue, params)).to.emit(house, 'Executed').withArgs(signer.address, venue)
+    })
+
+    it('withdraw', async () => {
+      let depositor: string = signer.address
+      let venue: string = sushiswapVenue.address
+      let quantity: BigNumber = parseEther('1')
+      let pair: string = await factory.getPair(virtualRedeem.address, underlying.address)
+      let lpBalance: BigNumberish = await house.credit(pair, signer.address)
+      let lpBalance2: BigNumberish = await house.debit(pair, signer.address)
+      console.log(signer.address, formatEther(lpBalance), formatEther(lpBalance2))
+      let params: any = sushiswapVenue.interface.encodeFunctionData('withdraw', [
+        [option.address],
+        [lpBalance],
+        ['0', '0'],
         signer.address,
         deadline,
       ])
