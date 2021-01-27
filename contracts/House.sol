@@ -22,6 +22,7 @@ import {
 import {Accelerator} from "./Accelerator.sol";
 import {ICapitol} from "./interfaces/ICapitol.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
+import {IHouse} from "./interfaces/IHouse.sol";
 import {IVERC20} from "./interfaces/IVERC20.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {RouterLib} from "./libraries/RouterLib.sol";
@@ -30,42 +31,49 @@ import {VirtualRouter} from "./VirtualRouter.sol";
 
 import "hardhat/console.sol";
 
-contract House is Ownable, VirtualRouter, Accelerator {
+contract House is Ownable, VirtualRouter, Accelerator, IHouse {
     /* using SafeERC20 for IERC20; */
     using SafeMath for uint256;
 
+    // User position data structure
+    // 1. Depositor address
+    // 2. The underlying asset address
+    // 3. The collateral asset address
+    // 4. The representational debt unit balance
     struct Account {
-        mapping(address => uint256) balanceOf;
+        address depositor;
+        address underlying;
+        address collateral;
+        mapping(address => uint256) balance;
     }
 
-    event Executed(address indexed from, address indexed venue);
-    // liquidity
-    event Leveraged(
-        address indexed depositor,
-        address indexed optionAddress,
-        address indexed pool,
-        uint256 quantity
-    );
-    event Deleveraged(
-        address indexed from,
-        address indexed optionAddress,
-        uint256 liquidity
-    );
-
-    event CollateralDeposited(
-        address indexed depositor,
-        address[] indexed tokens,
-        uint256[] amounts
-    );
-    event CollateralWithdrawn(
-        address indexed depositor,
-        address[] indexed tokens,
-        uint256[] amounts
-    );
+    // System balance sheet and collateral data structure
+    // This data structure needs to carry a few items:
+    // 1. If this reserve[asset] is enabled/exists
+    // 2. The address for the ctoken to lend "foam" to.
+    // 3. The nonce of the reserve for the allReserves array.
+    // 4. The total quantity of reserve assets held by this contract
+    // 5. The total debt of the system
+    // 6. The total supply of representational debt units
+    struct Reserve {
+        bool enabled;
+        address cTokenAddress;
+        uint8 nonce;
+        uint256 balance;
+        uint256 totalDebt;
+        uint256 totalSupplyOfDebt;
+    }
 
     ICapitol public capitol;
     Accelerator public accelerator;
+
+    bool public EXECUTING;
+    uint256 public NONCE;
     address public CALLER;
+
+    address[] public allReserves;
+    uint256 public accountNonce;
+    mapping(uint256 => Account) public accounts;
 
     mapping(address => mapping(address => uint256)) public debit;
     mapping(address => mapping(address => uint256)) public credit;
