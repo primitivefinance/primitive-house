@@ -31,9 +31,34 @@ import {VirtualRouter} from "./VirtualRouter.sol";
 
 import "hardhat/console.sol";
 
-contract House is Ownable, VirtualRouter, Accelerator, IHouse {
+contract House is Ownable, VirtualRouter, Accelerator {
     /* using SafeERC20 for IERC20; */
     using SafeMath for uint256;
+
+    event Executed(address indexed from, address indexed venue);
+    // liquidity
+    event Leveraged(
+        address indexed depositor,
+        address indexed optionAddress,
+        address indexed pool,
+        uint256 quantity
+    );
+    event Deleveraged(
+        address indexed from,
+        address indexed optionAddress,
+        uint256 liquidity
+    );
+
+    event CollateralDeposited(
+        address indexed depositor,
+        address[] indexed tokens,
+        uint256[] amounts
+    );
+    event CollateralWithdrawn(
+        address indexed depositor,
+        address[] indexed tokens,
+        uint256[] amounts
+    );
 
     // User position data structure
     // 1. Depositor address
