@@ -11,7 +11,7 @@ contract VERC20 is PrimitiveERC20, IVERC20 {
     string private _name;
     string private _symbol;
 
-    function initialize(address asset, address houseAddress) public override {
+    constructor(address asset, address houseAddress) public {
         require(address(house) == address(0x0), "ERR_INTIIALIZED");
         house = IHouse(houseAddress);
         /* string memory assetName = IVERC20(asset).name();

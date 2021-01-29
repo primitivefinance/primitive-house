@@ -39,9 +39,12 @@ contract Virtualizer is Ownable, ReentrancyGuard {
 
     // Initializes a new virtual asset.
     function issueVirtual(address asset, address virtualAsset) external {
-        IVERC20(virtualAsset).initialize(asset, address(this));
         ReserveData storage reserve = _reserves[asset];
         reserve.virtualToken = IVERC20(virtualAsset);
+    }
+
+    function issueVirtualOption(address asset, address virtualAsset) external {
+        virtualOptions[asset] = virtualAsset;
     }
 
     // Initialize a virtual option.

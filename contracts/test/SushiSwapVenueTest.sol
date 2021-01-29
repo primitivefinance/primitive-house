@@ -24,4 +24,12 @@ contract SushiSwapVenueTest is SushiSwapVenue {
         factory = IUniswapV2Factory(factory_);
         router = IUniswapV2Router02(router_);
     }
+
+    // ==== TESTING WILL REMOVE ====
+
+    uint256 public test;
+
+    function setTest(uint256 test_) public {
+        test = test_;
+    }
 }

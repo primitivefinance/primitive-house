@@ -22,20 +22,20 @@ import {
 import {Accelerator} from "./Accelerator.sol";
 import {ICapitol} from "./interfaces/ICapitol.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
+import {IHouse} from "./interfaces/IHouse.sol";
 import {IVERC20} from "./interfaces/IVERC20.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {RouterLib} from "./libraries/RouterLib.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {VirtualRouter} from "./VirtualRouter.sol";
 
+import "hardhat/console.sol";
+
 contract House is Ownable, VirtualRouter, Accelerator {
     /* using SafeERC20 for IERC20; */
     using SafeMath for uint256;
 
-    struct Account {
-        mapping(address => uint256) balanceOf;
-    }
-
+    event Executed(address indexed from, address indexed venue);
     // liquidity
     event Leveraged(
         address indexed depositor,
@@ -60,9 +60,45 @@ contract House is Ownable, VirtualRouter, Accelerator {
         uint256[] amounts
     );
 
+    // User position data structure
+    // 1. Depositor address
+    // 2. The underlying asset address
+    // 3. The collateral asset address
+    // 4. The representational debt unit balance
+    struct Account {
+        address depositor;
+        address underlying;
+        address collateral;
+        mapping(address => uint256) balance;
+    }
+
+    // System balance sheet and collateral data structure
+    // This data structure needs to carry a few items:
+    // 1. If this reserve[asset] is enabled/exists
+    // 2. The address for the ctoken to lend "foam" to.
+    // 3. The nonce of the reserve for the allReserves array.
+    // 4. The total quantity of reserve assets held by this contract
+    // 5. The total debt of the system
+    // 6. The total supply of representational debt units
+    struct Reserve {
+        bool enabled;
+        address cTokenAddress;
+        uint8 nonce;
+        uint256 balance;
+        uint256 totalDebt;
+        uint256 totalSupplyOfDebt;
+    }
+
     ICapitol public capitol;
     Accelerator public accelerator;
+
+    bool public EXECUTING;
+    uint256 public NONCE;
     address public CALLER;
+
+    address[] public allReserves;
+    uint256 public accountNonce;
+    mapping(uint256 => Account) public accounts;
 
     mapping(address => mapping(address => uint256)) public debit;
     mapping(address => mapping(address => uint256)) public credit;
@@ -93,8 +129,10 @@ contract House is Ownable, VirtualRouter, Accelerator {
             // Pull tokens from depositor.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
+            console.log("transferFrom venue to house", quantity);
             IERC20(asset).transferFrom(msg.sender, address(this), quantity);
         }
+        console.log("internal add tokens to house");
         return _addTokens(depositor, tokens, amounts, false);
     }
 
@@ -114,11 +152,13 @@ contract House is Ownable, VirtualRouter, Accelerator {
             if (isDebit) {
                 debit[asset][depositor] = debit[asset][depositor].add(quantity);
             } else {
+                console.log(quantity);
                 credit[asset][depositor] = credit[asset][depositor].add(
                     quantity
                 );
             }
         }
+        console.log(depositor);
         emit CollateralDeposited(depositor, tokens, amounts);
         return true;
     }
@@ -134,12 +174,14 @@ contract House is Ownable, VirtualRouter, Accelerator {
         uint256[] memory amounts
     ) public returns (bool) {
         // Remove balances from state.
-        _removeTokens(withdrawee, tokens, amounts, true);
+        console.log("calling remove tokens");
+        _removeTokens(CALLER, tokens, amounts, false);
         uint256 tokensLength = tokens.length;
         for (uint256 i = 0; i < tokensLength; i++) {
             // Push tokens to withdrawee.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
+            console.log("transferring tokens to withdrawee");
             IERC20(asset).transfer(withdrawee, quantity);
         }
         return true;
@@ -238,5 +280,7 @@ contract House is Ownable, VirtualRouter, Accelerator {
     {
         CALLER = msg.sender;
         accelerator.executeCall(venue, params);
+        emit Executed(msg.sender, venue);
+        return true;
     }
 }

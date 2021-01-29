@@ -14,6 +14,8 @@ import {
     IOption
 } from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
 
+import "hardhat/console.sol";
+
 contract Venue {
     using SafeERC20 for IERC20;
 
@@ -114,6 +116,13 @@ contract Venue {
         house.removeTokens(house.CALLER(), tokens, amounts);
     }
 
+    function _borrowCollateral(
+        address[] memory tokens,
+        uint256[] memory amounts
+    ) internal {
+        house.removeTokens(address(this), tokens, amounts);
+    }
+
     // Pulls tokens from user and sends them to the house.
     function _takeTokens(address token, uint256 quantity) internal {
         if (quantity > 0) {
@@ -126,5 +135,23 @@ contract Venue {
         if (bal > 0) {
             IERC20(token).transfer(house.CALLER(), bal);
         }
+    }
+
+    // ==== View ====
+
+    function getVirtualAssets(address optionAddress)
+        public
+        view
+        returns (
+            address,
+            address,
+            address,
+            address
+        )
+    {
+        IOption virtualOption = IOption(house.virtualOptions(optionAddress));
+        (address under, address strike, address short) =
+            virtualOption.getAssetAddresses();
+        return (address(virtualOption), under, strike, short);
     }
 }
