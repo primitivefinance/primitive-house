@@ -1,31 +1,6 @@
 pragma solidity >=0.6.2;
 
 interface IHouse {
-    event Executed(address indexed from, address indexed venue);
-    // liquidity
-    event Leveraged(
-        address indexed depositor,
-        address indexed optionAddress,
-        address indexed pool,
-        uint256 quantity
-    );
-    event Deleveraged(
-        address indexed from,
-        address indexed optionAddress,
-        uint256 liquidity
-    );
-
-    event CollateralDeposited(
-        address indexed depositor,
-        address[] indexed tokens,
-        uint256[] amounts
-    );
-    event CollateralWithdrawn(
-        address indexed depositor,
-        address[] indexed tokens,
-        uint256[] amounts
-    );
-
     function virtualOptions(address optionAddress)
         external
         view

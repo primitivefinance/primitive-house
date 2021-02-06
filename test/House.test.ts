@@ -208,9 +208,8 @@ describe('House', function () {
       let venue: string = sushiswapVenue.address
       let quantity: BigNumber = parseEther('1')
       let pair: string = await factory.getPair(virtualRedeem.address, underlying.address)
-      let lpBalance: BigNumberish = await house.credit(pair, signer.address)
-      let lpBalance2: BigNumberish = await house.debit(pair, signer.address)
-      console.log(signer.address, formatEther(lpBalance), formatEther(lpBalance2))
+      let lpBalance: BigNumberish = await house.balance(pair, signer.address)
+      console.log(signer.address, `credit: ${formatEther(lpBalance)}`)
       let params: any = sushiswapVenue.interface.encodeFunctionData('withdraw', [
         [option.address],
         [lpBalance],
@@ -219,6 +218,7 @@ describe('House', function () {
         deadline,
       ])
       await expect(house.execute(venue, params)).to.emit(house, 'Executed').withArgs(signer.address, venue)
+      console.log(signer.address, `credit: ${formatEther(lpBalance)}`)
     })
   })
 })

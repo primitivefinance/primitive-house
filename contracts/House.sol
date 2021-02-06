@@ -69,43 +69,38 @@ contract House is Ownable, VirtualRouter, Accelerator {
         address depositor;
         address underlying;
         address collateral;
+        uint256 underlyingDebt;
         mapping(address => uint256) balance;
-    }
-
-    // System balance sheet and collateral data structure
-    // This data structure needs to carry a few items:
-    // 1. If this reserve[asset] is enabled/exists
-    // 2. The address for the ctoken to lend "foam" to.
-    // 3. The nonce of the reserve for the allReserves array.
-    // 4. The total quantity of reserve assets held by this contract
-    // 5. The total debt of the system
-    // 6. The total supply of representational debt units
-    struct Reserve {
-        bool enabled;
-        address cTokenAddress;
-        uint8 nonce;
-        uint256 balance;
-        uint256 totalDebt;
-        uint256 totalSupplyOfDebt;
     }
 
     ICapitol public capitol;
     Accelerator public accelerator;
 
-    bool public EXECUTING;
-    uint256 public NONCE;
-    address public CALLER;
+    bool private _EXECUTING;
+    uint256 private constant _NO_NONCE = uint256(-1);
+    address private constant _NO_ADDRESS = address(21);
 
-    address[] public allReserves;
-    uint256 public accountNonce;
+    uint256 private _NONCE;
+    address private _CALLER;
+
+    address[] private allReserves;
+    uint256 private _accountNonce;
+
     mapping(uint256 => Account) public accounts;
-
-    mapping(address => mapping(address => uint256)) public debit;
-    mapping(address => mapping(address => uint256)) public credit;
+    mapping(address => mapping(address => uint256)) private _balance;
 
     modifier isEndorsed(address venue_) {
         require(capitol.getIsEndorsed(venue_), "House: NOT_ENDORSED");
         _;
+    }
+
+    modifier isExec() {
+        require(_NONCE != _NO_NONCE, "House: NO_NONCE");
+        require(_CALLER != _NO_ADDRESS, "House: NO_ADDRESS");
+        require(!_EXECUTING, "House: IN_EXECUTION");
+        _EXECUTING = true;
+        _;
+        _EXECUTING = false;
     }
 
     constructor(
@@ -120,11 +115,14 @@ contract House is Ownable, VirtualRouter, Accelerator {
     // ==== Balance Sheet Accounting ====
 
     function addTokens(
+        uint256 accountNonce,
         address depositor,
         address[] memory tokens,
         uint256[] memory amounts
     ) public returns (bool) {
+        Account storage acc = accounts[accountNonce];
         uint256 tokensLength = tokens.length;
+        _addTokens(depositor, tokens, amounts, false);
         for (uint256 i = 0; i < tokensLength; i++) {
             // Pull tokens from depositor.
             address asset = tokens[i];
@@ -133,7 +131,7 @@ contract House is Ownable, VirtualRouter, Accelerator {
             IERC20(asset).transferFrom(msg.sender, address(this), quantity);
         }
         console.log("internal add tokens to house");
-        return _addTokens(depositor, tokens, amounts, false);
+        return true;
     }
 
     function _addTokens(
@@ -149,23 +147,54 @@ contract House is Ownable, VirtualRouter, Accelerator {
             // Add liquidity to a depositor's respective pool balance.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
-            if (isDebit) {
-                debit[asset][depositor] = debit[asset][depositor].add(quantity);
-            } else {
-                console.log(quantity);
-                credit[asset][depositor] = credit[asset][depositor].add(
-                    quantity
-                );
-            }
+            balance[depositor][asset] = balance[depositor][asset].add(quantity);
         }
         console.log(depositor);
         emit CollateralDeposited(depositor, tokens, amounts);
         return true;
     }
 
+    function addToken(address token, uint256 amount)
+        public
+        isExec
+        returns (bool)
+    {
+        // Pull the tokens
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        // Add the tokens to the executing position state
+        return _addToken(token, amount);
+    }
+
+    function _addToken(address token, uint256 amount) internal returns (bool) {
+        Account storage acc = accounts[getExecutingNonce()];
+        acc.balance[token] = acc.balance[token].add(quantity);
+        emit CollateralDeposited(acc.depositor, token, amount);
+        return true;
+    }
+
+    function removeToken(address token, uint256 amount)
+        public
+        isExec
+        returns (bool)
+    {
+        // Remove tokens from account state
+        _removeToken(token, amount);
+        // Push the tokens to the msg.sender.
+        return IERC20(token).transfer(msg.sender, amount);
+    }
+
+    function _removeToken(address token, uint256 amount)
+        internal
+        returns (bool)
+    {
+        Account storage acc = accounts[getExecutingNonce()];
+        acc.balance[token] = acc.balance[token].sub(amount);
+        emit CollateralWithdrawn(acc.depositor, token, amount);
+        return true;
+    }
+
     function takeTokensFromUser(address token, uint256 quantity) external {
-        address depositor = CALLER; //fix
-        IERC20(token).transferFrom(depositor, msg.sender, quantity);
+        IERC20(token).transferFrom(_CALLER, msg.sender, quantity);
     }
 
     function removeTokens(
@@ -175,7 +204,7 @@ contract House is Ownable, VirtualRouter, Accelerator {
     ) public returns (bool) {
         // Remove balances from state.
         console.log("calling remove tokens");
-        _removeTokens(CALLER, tokens, amounts, false);
+        _removeTokens(_CALLER, tokens, amounts, false);
         uint256 tokensLength = tokens.length;
         for (uint256 i = 0; i < tokensLength; i++) {
             // Push tokens to withdrawee.
@@ -200,34 +229,12 @@ contract House is Ownable, VirtualRouter, Accelerator {
             // Remove liquidity to a withdrawee's respective pool balance.
             address asset = tokens[i];
             uint256 quantity = amounts[i];
-            if (isDebit) {
-                debit[asset][withdrawee] = debit[asset][withdrawee].sub(
-                    quantity
-                );
-            } else {
-                credit[asset][withdrawee] = credit[asset][withdrawee].sub(
-                    quantity
-                );
-            }
+            balance[withdrawee][asset] = balance[withdrawee][asset].sub(
+                quantity
+            );
         }
         emit CollateralWithdrawn(withdrawee, tokens, amounts);
         return true;
-    }
-
-    function creditBalanceOf(address depositor, address token)
-        public
-        view
-        returns (uint256)
-    {
-        return credit[token][depositor];
-    }
-
-    function debitBalanceOf(address depositor, address token)
-        public
-        view
-        returns (uint256)
-    {
-        return debit[token][depositor];
     }
 
     // ==== Options Management ====
@@ -240,7 +247,11 @@ contract House is Ownable, VirtualRouter, Accelerator {
         uint256 quantity,
         address longReceiver,
         address shortReceiver
-    ) public isEndorsed(msg.sender) {
+    ) public isEndorsed(msg.sender) isExec {
+        // Get the account that is being updated
+        Account storage acc = accounts[getExecutingNonce()];
+        // Update the underlying debt to add minted option quantity
+        acc.underlyingDebt = acc.underlyingDebt.add(quantity);
         address receiver =
             longReceiver == shortReceiver ? longReceiver : address(this);
         address virtualOption = _virtualMint(optionAddress, quantity, receiver);
@@ -265,22 +276,68 @@ contract House is Ownable, VirtualRouter, Accelerator {
         address optionAddress,
         uint256 quantity,
         address receiver
-    ) public isEndorsed(msg.sender) {
+    ) public isEndorsed(msg.sender) isExec {
+        // Get the account that is being updated
+        Account storage acc = accounts[getExecutingNonce()];
+        // Update the underlying debt to subtract the option quantity
+        acc.underlyingDebt = acc.underlyingDebt.sub(quantity);
         address virtualOption = _virtualBurn(optionAddress, quantity, receiver);
     }
 
     // ==== Execution ====
 
     // Calls the accelerator intermediary to execute a transaction with a venue on behalf of caller.
-    function execute(address venue, bytes calldata params)
-        external
-        payable
-        nonReentrant
-        returns (bool)
-    {
-        CALLER = msg.sender;
+    function execute(
+        uint256 accountNonce,
+        address venue,
+        bytes calldata params
+    ) external payable nonReentrant returns (bool) {
+        if (accountNonce == 0) {
+            accountNonce = _accountNonce++;
+            accounts[accountNonce].depositor = msg.sender;
+        } else {
+            require(
+                accounts[accountNonce].depositor == msg.sender,
+                "House: NOT_DEPOSITOR"
+            );
+            require(accountNonce < _accountNonce, "House: ABOVE_NONCE");
+        }
+        _CALLER = msg.sender;
+        _NONCE = accountNonce;
         accelerator.executeCall(venue, params);
+        _CALLER = _NO_ADDRESS;
+        _NONCE = _NO_NONCE;
         emit Executed(msg.sender, venue);
         return true;
+    }
+
+    // ==== View ====
+
+    function isExecuting() public view returns (bool) {
+        return _EXECUTING;
+    }
+
+    function getExecutingNonce() public view returns (uint256) {
+        return _NONCE;
+    }
+
+    function getExecutingCaller() public view returns (address) {
+        return _CALLER;
+    }
+
+    function getAccountNonce() public view returns (uint256) {
+        return _accountNonce;
+    }
+
+    function getReserves() public view returns (address[] memory) {
+        return allReserves;
+    }
+
+    function getBalance(address account, address token)
+        public
+        view
+        returns (uint256)
+    {
+        return _balance[account][token];
     }
 }
