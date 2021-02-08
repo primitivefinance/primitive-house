@@ -1,7 +1,8 @@
-pragma solidity >=0.6.2;
+pragma solidity ^0.7.1;
 
 /**
- * @title The Primitive ERC20 base token.
+ * @title  Opionated implementation of an ERC-20 with permit.
+ * @notice Replaces the constructor with an `initialize` function to support clones.
  * @author Primitive
  */
 
@@ -11,9 +12,9 @@ import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
 contract PrimitiveERC20 is IPrimitiveERC20 {
     using SafeMath for uint256;
 
-    string public constant name = "Primitive V1";
-    string public constant symbol = "PRM-V1";
-    uint8 public constant decimals = 18;
+    string private _name;
+    string private _symbol;
+    uint8 public constant override decimals = 18;
     uint256 public override totalSupply;
     mapping(address => uint256) public override balanceOf;
     mapping(address => mapping(address => uint256)) public override allowance;
@@ -24,7 +25,9 @@ contract PrimitiveERC20 is IPrimitiveERC20 {
         0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
     mapping(address => uint256) public override nonces;
 
-    constructor() public {
+    constructor() {}
+
+    function initialize(string memory name_, string memory symbol_) public {
         uint256 chainId;
         assembly {
             chainId := chainid()
@@ -34,12 +37,23 @@ contract PrimitiveERC20 is IPrimitiveERC20 {
                 keccak256(
                     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
                 ),
-                keccak256(bytes(name)),
+                keccak256(bytes(name_)),
                 keccak256(bytes("1")),
                 chainId,
                 address(this)
             )
         );
+
+        _name = name_;
+        _symbol = symbol_;
+    }
+
+    function name() public view override returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view override returns (string memory) {
+        return _symbol;
     }
 
     function _mint(address to, uint256 value) internal {
@@ -114,7 +128,7 @@ contract PrimitiveERC20 is IPrimitiveERC20 {
         bytes32 r,
         bytes32 s
     ) external override {
-        require(deadline >= block.timestamp, "PrimitiveV1: EXPIRED");
+        require(deadline >= block.timestamp, "Primitive: EXPIRED");
         bytes32 digest =
             keccak256(
                 abi.encodePacked(
@@ -135,7 +149,7 @@ contract PrimitiveERC20 is IPrimitiveERC20 {
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(
             recoveredAddress != address(0) && recoveredAddress == owner,
-            "PrimitiveV1: INVALID_SIGNATURE"
+            "Primitive: INVALID_SIGNATURE"
         );
         _approve(owner, spender, value);
     }
