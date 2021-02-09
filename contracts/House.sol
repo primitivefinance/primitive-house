@@ -11,44 +11,28 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {
     ReentrancyGuard
 } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-/* import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol"; */
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 // Primitive
-import {
-    IOption
-} from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
+import {IOptionCore} from "./interfaces/IOptionCore.sol";
 
 // Internal
 import {Accelerator} from "./Accelerator.sol";
 import {ICapitol} from "./interfaces/ICapitol.sol";
-import {IERC20} from "./interfaces/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IHouse} from "./interfaces/IHouse.sol";
-import {IVERC20} from "./interfaces/IVERC20.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
-import {RouterLib} from "./libraries/RouterLib.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
-import {VirtualRouter} from "./VirtualRouter.sol";
+
+import {Manager} from "./Manager.sol";
 
 import "hardhat/console.sol";
 
-contract House is Ownable, VirtualRouter, Accelerator {
-    /* using SafeERC20 for IERC20; */
+contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
     event Executed(address indexed from, address indexed venue);
-    // liquidity
-    event Leveraged(
-        address indexed depositor,
-        address indexed optionAddress,
-        address indexed pool,
-        uint256 quantity
-    );
-    event Deleveraged(
-        address indexed from,
-        address indexed optionAddress,
-        uint256 liquidity
-    );
-
     event CollateralDeposited(
         address indexed depositor,
         address[] indexed tokens,
@@ -74,6 +58,7 @@ contract House is Ownable, VirtualRouter, Accelerator {
     }
 
     ICapitol public capitol;
+    IOptionCore public core;
     Accelerator public accelerator;
 
     bool private _EXECUTING;
@@ -103,12 +88,9 @@ contract House is Ownable, VirtualRouter, Accelerator {
         _EXECUTING = false;
     }
 
-    constructor(
-        address weth_,
-        address registry_,
-        address capitol_
-    ) public VirtualRouter(weth_, registry_) {
+    constructor(address capitol_, address optionCore_) public {
         capitol = ICapitol(capitol_);
+        core = IOptionCore(optionCore_);
         accelerator = new Accelerator();
     }
 
@@ -242,46 +224,34 @@ contract House is Ownable, VirtualRouter, Accelerator {
     /**
      * @dev Mints virtual options to the receiver addresses.
      */
-    function mintVirtualOptions(
-        address optionAddress,
+    function mintOptions(
+        bytes memory oid,
         uint256 quantity,
-        address longReceiver,
-        address shortReceiver
-    ) public isEndorsed(msg.sender) isExec {
+        address[] memory receivers
+    ) public isEndorsed(msg.sender) isExec returns (uint256) {
         // Get the account that is being updated
         Account storage acc = accounts[getExecutingNonce()];
         // Update the underlying debt to add minted option quantity
-        acc.underlyingDebt = acc.underlyingDebt.add(quantity);
-        address receiver =
-            longReceiver == shortReceiver ? longReceiver : address(this);
-        address virtualOption = _virtualMint(optionAddress, quantity, receiver);
-        if (receiver == address(this)) {
-            IERC20(virtualOption).transfer(longReceiver, quantity);
-            uint256 shortQuantity =
-                RouterLib.getProportionalShortOptions(
-                    IOption(virtualOption),
-                    quantity
-                );
-            IERC20(IOption(virtualOption).redeemToken()).transfer(
-                shortReceiver,
-                shortQuantity
-            );
-        }
+        uint256 prevDebt = acc.underlyingDebt;
+        acc.underlyingDebt = prevDebt.add(quantity);
+        uint256 successCode = core.dangerousMint(oid, receivers);
+        return successCode;
     }
 
     /**
      * @dev Pulls short and long options from `msg.sender` and burns them.
      */
-    function burnVirtualOptions(
-        address optionAddress,
+    function burnOptions(
+        bytes memory oid,
         uint256 quantity,
-        address receiver
-    ) public isEndorsed(msg.sender) isExec {
+        address[] memory holders
+    ) public isEndorsed(msg.sender) isExec returns (uint256) {
         // Get the account that is being updated
         Account storage acc = accounts[getExecutingNonce()];
         // Update the underlying debt to subtract the option quantity
         acc.underlyingDebt = acc.underlyingDebt.sub(quantity);
-        address virtualOption = _virtualBurn(optionAddress, quantity, receiver);
+        uint256 successCode = core.dangerousBurn(oid, holders);
+        return successCode;
     }
 
     // ==== Execution ====
@@ -309,6 +279,30 @@ contract House is Ownable, VirtualRouter, Accelerator {
         _NONCE = _NO_NONCE;
         emit Executed(msg.sender, venue);
         return true;
+    }
+
+    // ===== Invariant Rules =====
+
+    function mintingInvariant()
+        public
+        override
+        isExec
+        returns (uint256, uint256)
+    {
+        // Get the account that is being updated
+        Account storage acc = accounts[getExecutingNonce()];
+        return (uint256(0), acc.underlyingDebt);
+    }
+
+    function burningInvariant()
+        public
+        override
+        isExec
+        returns (uint256, uint256)
+    {
+        // Get the account that is being updated
+        Account storage acc = accounts[getExecutingNonce()];
+        return (uint256(0), acc.underlyingDebt);
     }
 
     // ==== View ====
