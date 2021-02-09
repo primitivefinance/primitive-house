@@ -1,22 +1,19 @@
 pragma solidity ^0.7.1;
 pragma experimental ABIEncoderV2;
 
-interface IOptionCore {
-    function dangerousMint(bytes calldata oid, address[] calldata receivers)
-        external
-        returns (uint256);
+import {IOptionData} from "./IOptionData.sol";
+import {IOptionDeployer} from "./IOptionDeployer.sol";
 
-    function dangerousBatchMint(
-        bytes[] calldata oidBatch,
-        address[] calldata receiverBatch
-    ) external returns (uint256);
+interface IOptionCore is IOptionData, IOptionDeployer {
+    function dangerousMint(
+        bytes calldata oid,
+        uint256 amount,
+        address[] calldata receivers
+    ) external returns (bool);
 
-    function dangerousBurn(bytes calldata oid, address[] calldata accounts)
-        external
-        returns (uint256);
-
-    function dangerousBatchBurn(
-        bytes[] calldata oidBatch,
+    function dangerousBurn(
+        bytes calldata oid,
+        uint256[] calldata amounts,
         address[] calldata accounts
-    ) external returns (uint256);
+    ) external returns (bool);
 }

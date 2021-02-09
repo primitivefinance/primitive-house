@@ -5,9 +5,33 @@ pragma solidity ^0.7.1;
  */
 
 abstract contract Manager {
-    function mintingInvariant() internal virtual returns (uint256, uint256);
+    function mintingInvariant(bytes calldata oid)
+        external
+        view
+        virtual
+        returns (bool);
 
-    function exerciseInvariant() internal virtual returns (uint256, uint256);
+    function burningInvariant(bytes calldata oid)
+        external
+        view
+        virtual
+        returns (bool);
 
-    function settlementInvariant() internal virtual returns (uint256, uint256);
+    function exerciseInvariant(bytes calldata oid)
+        external
+        view
+        virtual
+        returns (bool);
+
+    function settlementInvariant(bytes calldata oid)
+        external
+        view
+        virtual
+        returns (bool);
+
+    function expiryInvariant(bytes memory oid)
+        external
+        view
+        virtual
+        returns (bool);
 }

@@ -1,9 +1,16 @@
 pragma solidity ^0.7.1;
 
 interface IManager {
-    function mintingInvariant() external returns (uint256, uint256);
+    function mintingInvariant(bytes calldata oid) external view returns (bool);
 
-    function exerciseInvariant() external returns (uint256, uint256);
+    function burningInvariant(bytes calldata oid) external view returns (bool);
 
-    function settlementInvariant() external returns (uint256, uint256);
+    function exerciseInvariant(bytes calldata oid) external view returns (bool);
+
+    function settlementInvariant(bytes calldata oid)
+        external
+        view
+        returns (bool);
+
+    function expiryInvariant(bytes memory oid) external view returns (bool);
 }

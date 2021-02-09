@@ -11,7 +11,9 @@ import {IPrimitiveERC20, IERC20} from "./interfaces/IPrimitiveERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 
-contract OptionData is OptionDeployer {
+import {IOptionData} from "./interfaces/IOptionData.sol";
+
+contract OptionData is IOptionData, OptionDeployer {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -50,6 +52,7 @@ contract OptionData is OptionDeployer {
         bool isCall
     )
         public
+        override
         returns (
             bytes memory,
             address,
@@ -97,6 +100,7 @@ contract OptionData is OptionDeployer {
     function getTokenData(bytes memory id)
         public
         view
+        override
         returns (address, address)
     {
         TokenData memory data = _tokenData[id];
@@ -106,6 +110,7 @@ contract OptionData is OptionDeployer {
     function getParameters(bytes memory id)
         public
         view
+        override
         returns (
             address,
             address,
@@ -128,6 +133,7 @@ contract OptionData is OptionDeployer {
     function generateType(bool isCall)
         public
         pure
+        override
         returns (uint8, string memory)
     {
         uint8 optionType;

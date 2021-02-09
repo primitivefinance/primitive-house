@@ -13,7 +13,7 @@ import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 
-contract OptionDeployer {
+contract OptionDeployer is IOptionDeployer {
     using SafeMath for uint256;
 
     address private immutable _template;
@@ -33,6 +33,7 @@ contract OptionDeployer {
 
     function deployClone(string memory name, string memory symbol)
         public
+        override
         returns (address)
     {
         // Calculates the salt for create2.
@@ -49,7 +50,7 @@ contract OptionDeployer {
     }
 
     // ===== View =====
-    function getTemplate() public view returns (address) {
+    function getTemplate() public view override returns (address) {
         return _template;
     }
 }
