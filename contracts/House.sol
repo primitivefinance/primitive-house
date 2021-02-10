@@ -15,6 +15,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 // Primitive
 import {IOptionCore} from "./interfaces/IOptionCore.sol";
+import {IFlash} from "./interfaces/IFlash.sol";
 
 // Internal
 import {Accelerator} from "./Accelerator.sol";
@@ -49,6 +50,15 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
     event Executed(address indexed from, address indexed venue);
 
     /**
+     * @notice Event emitted after a `_universalDebt` balance has been updated.
+     */
+    event UpdatedUniversalDebt(
+        uint256 accountNonce,
+        address indexed token,
+        uint256 newBalance
+    );
+
+    /**
      * @notice Event emitted when `token` is deposited to the House.
      */
     event CollateralDeposited(
@@ -75,6 +85,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      * 3. The id for the wrapped token
      * 4. The balance of the wrapped token
      * 5. The debt of the underlying token
+     * 6. The delta of debt in the executing block
      */
     struct Account {
         address depositor;
@@ -82,6 +93,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         uint256 wrappedId;
         uint256 balance;
         uint256 debt;
+        uint256 delta;
     }
 
     /**
@@ -129,11 +141,20 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      */
     mapping(uint256 => Account) private _accounts;
 
+    /**
+     * @dev The universal debt balance for each real token.
+     *      _universalDebt[token] = amount.
+     */
+    mapping(address => uint256) internal _universalDebt;
+
     modifier isEndorsed(address venue_) {
         require(_capitol.getIsEndorsed(venue_), "House: NOT_ENDORSED");
         _;
     }
 
+    /**
+     * @notice  A mutex to use during an `execute` call.
+     */
     modifier isExec() {
         require(_NONCE != _NO_NONCE, "House: NO_NONCE");
         require(_CALLER != _NO_ADDRESS, "House: NO_ADDRESS");
@@ -309,48 +330,157 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         return true;
     }
 
-    // ===== Options Management =====
+    // ===== Internal Balances =====
+
+    function _internalUpdate(address token, uint256 newBalance)
+        internal
+        isExec
+    {
+        uint256 prevBal = _universalDebt[token];
+        _universalDebt[token] = newBalance;
+        emit UpdatedUniversalDebt(_NONCE, token, newBalance);
+    }
+
+    function _addAccountDebt(uint256 amount) internal isExec returns (bool) {
+        Account storage acc = _accounts[getExecutingNonce()];
+        acc.debt = acc.debt.add(amount);
+        return true;
+    }
+
+    function _subtractAccountDebt(uint256 amount)
+        internal
+        isExec
+        returns (bool)
+    {
+        Account storage acc = _accounts[getExecutingNonce()];
+        acc.debt = acc.debt.sub(amount);
+        return true;
+    }
+
+    // ===== Option Core =====
 
     /**
      * @notice  Mints options to the receiver addresses.
      * @param   oid The option data id used to fetch option related data.
-     * @param   quantity The quantity of long and short option ERC20 tokens to mint.
+     * @param   requestAmt The requestAmt of options requested to be minted.
      * @param   receivers The long option ERC20 receiver, and short option ERC20 receiver.
      * @return  Whether or not the mint succeeded.
      */
     function mintOptions(
         bytes memory oid,
-        uint256 quantity,
+        uint256 requestAmt,
         address[] memory receivers
     ) public isEndorsed(msg.sender) isExec returns (bool) {
+        // Execute the mint
+        (bool success, uint256 actual) =
+            _core.dangerousMint(oid, requestAmt, receivers);
+
+        // Internal update
+        (address baseToken, , , , ) = _core.getParameters(oid);
+        uint256 newBalance = _universalDebt[baseToken].add(actual);
+        _internalUpdate(baseToken, newBalance);
+        return true;
+    }
+
+    /**
+     * @notice  Mints options to the receiver addresses without checking collateral.
+     * @param   oid The option data id used to fetch option related data.
+     * @param   requestAmt The requestAmt of long and short option ERC20 tokens to mint.
+     * @param   receivers The long option ERC20 receiver, and short option ERC20 receiver.
+     * @return  Whether or not the mint succeeded.
+     */
+    function borrowOptions(
+        bytes memory oid,
+        uint256 requestAmt,
+        address[] memory receivers
+    ) public isEndorsed(msg.sender) isExec returns (bool, uint256) {
         // Get the account that is being updated
         Account storage acc = _accounts[getExecutingNonce()];
-        // Update the underlying debt to add minted option quantity
-        uint256 prevDebt = acc.debt;
-        acc.debt = prevDebt.add(quantity);
-        return _core.dangerousMint(oid, quantity, receivers);
+        // Update the acc delta
+        acc.delta = requestAmt;
+        // Update acc debt balance
+        acc.balance = acc.balance.add(requestAmt);
+        (bool success, uint256 actualAmt) =
+            _core.dangerousMint(oid, requestAmt, receivers);
+        // Reset delta by subtracting from actual amount borrowed
+        acc.delta = actualAmt.sub(acc.delta);
+        return (success, actualAmt);
     }
 
     /**
      * @notice  Burns option ERC20 tokens from the `holders` address(es).
      * @param   oid The option data id used to fetch option related data.
-     * @param   quantity The quantity of long and short option ERC20 tokens to mint.
-     * @param   receivers The long option ERC20 receiver, and short option ERC20 receiver.
+     * @param   requestAmt The amount of long and short option ERC20 tokens to burn.
+     * @param   holders The address to burn long option ERC20 from, and address to burn short option ERC20 from.
      * @return  Whether or not the burn succeeded.
      */
     function burnOptions(
         bytes memory oid,
-        uint256 quantity,
+        uint256 requestAmt,
         address[] memory holders
     ) public isEndorsed(msg.sender) isExec returns (bool) {
         // Get the account that is being updated
         Account storage acc = _accounts[getExecutingNonce()];
         uint256[] memory amounts = new uint256[](2);
-        amounts[0] = quantity;
+        amounts[0] = requestAmt;
+        // Set the delta to the requestAmt so that the invariant will check if the burn amount matches.
+        acc.delta = requestAmt;
         // Burn the options.
         _core.dangerousBurn(oid, amounts, holders);
-        // Update the underlying debt to subtract the option quantity
-        acc.debt = acc.debt.sub(quantity);
+        // Update the underlying debt by subtracting the option requestAmt
+        uint256 accDebt = acc.debt;
+        acc.debt = requestAmt > accDebt ? uint256(0) : accDebt.sub(requestAmt);
+        // Update internally tracked baseToken balance
+        (address baseToken, , , , ) = _core.getParameters(oid);
+        _internalUpdate(baseToken, _universalDebt[baseToken].sub(requestAmt));
+        // Reset the account delta
+        acc.delta = 0;
+        return true;
+    }
+
+    /**
+     * @notice  Exercise option ERC20 tokens from the `holders` address(es).
+     * @dev     If not expired, burns long options, pulls strikePrice, and releases underlying.
+     *          If expired, cannot be executed.
+     * @param   oid The option data id used to fetch option related data.
+     * @param   requestAmt The requestAmt of long and short option ERC20 tokens to burn.
+     * @param   holders The address to burn long option ERC20 from, and address to burn short option ERC20 from.
+     * @return  Whether or not the burn succeeded.
+     */
+    function exerciseOptions(
+        address receiver,
+        bytes memory oid,
+        uint256 requestAmt,
+        address[] memory holders,
+        bytes memory data
+    ) public isEndorsed(msg.sender) isExec returns (bool) {
+        // Get the account that is being updated
+        Account storage acc = _accounts[getExecutingNonce()];
+        require(expiryInvariant(oid), "House: EXERCISE_INVARIANT");
+
+        // Store params in memory for gas savings
+        (address baseToken, address quoteToken, , , ) =
+            _core.getParameters(oid);
+
+        // Optimistically transfer base ERC20 tokens to receiver
+        IERC20(baseToken).safeTransfer(receiver, requestAmt);
+        // Trigger flash callback if data argument exists
+        if (data.length > 0)
+            IFlash(receiver).primitiveFlash(msg.sender, requestAmt, data);
+
+        // Burn `requestAmt` of long options.
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = requestAmt;
+        // Burn the options, which will call the burningInvariant() function in this contract.
+        _core.dangerousBurn(oid, amounts, holders);
+
+        // Get the base token balance
+        uint256 currBal = IERC20(baseToken).balanceOf(address(this));
+        // Get the strike token balance
+        uint256 currStrikeBal = IERC20(quoteToken).balanceOf(address(this));
+        // Update both token balances
+        _internalUpdate(baseToken, currBal);
+        _internalUpdate(quoteToken, currStrikeBal);
         return true;
     }
 
@@ -390,23 +520,46 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
 
     // ====== Invariant Rules ======
 
-    function mintingInvariant(bytes memory oid)
+    /**
+     * @notice  An invartiant rule implementation which is called by `_core` when option minting occurs.
+     * @dev     Warning: this implementation is critical to the solvency of the option tokens.
+     * @param   oid The option id which will be used for checking the invariants.
+     * @param   requestAmt The requestAmt of options being requested to be minted.
+     * @return  Whether or not the invariant checks succeeded.
+     */
+    function mintingInvariant(bytes memory oid, uint256 requestAmt)
         public
         view
         override
         isExec
-        returns (bool)
+        returns (bool, uint256)
     {
-        bool invariant = expiryInvariant(oid);
-        if (invariant) {
-            // execute code
-
-            return invariant;
-        } else {
-            return invariant;
+        require(expiryInvariant(oid), "House: EXPIRED");
+        // if not expired
+        (address baseToken, , , , ) = _core.getParameters(oid);
+        // Check the previous baseToken balance against the current balance.
+        uint256 prevBal = _universalDebt[baseToken];
+        uint256 currBal = IERC20(baseToken).balanceOf(address(this));
+        uint256 actualAmt = currBal.sub(prevBal);
+        // If there's a difference, return true and the actualAmt.
+        bool internalUpdated = actualAmt >= requestAmt;
+        // Fail early if this contract does not have enough base tokens
+        require(currBal >= requestAmt, "House: MINT_AMOUNT");
+        // If there is no actualAmt, require the acc delta to be greater than 0, and return delta as actualAmt
+        if (!internalUpdated) {
+            Account memory acc = _accounts[_NONCE];
+            uint256 delta = acc.delta;
+            return (delta > 0, delta);
         }
+        return (internalUpdated, actualAmt);
     }
 
+    /**
+     * @notice  An invartiant rule implementation which is called by `_core` when option operations occur.
+     * @dev     Warning: this implementation is critical to the solvency of the option tokens.
+     * @param   oid The option id which will be used for checking the invariants.
+     * @return  Whether or not the invariant checks succeeded.
+     */
     function expiryInvariant(bytes memory oid)
         public
         view
@@ -418,14 +571,88 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         return notExpired;
     }
 
-    function burningInvariant(bytes memory oid)
+    function exerciseInvariant(bytes memory oid, uint256[] memory amounts)
+        public
+        view
+        override
+        returns (bool)
+    {
+        // Exercise:    Burn long, Receive `amount`*strikePrice quoteTokens, Push `amount` baseTokens
+        // Get the parameters of the option
+        (address baseToken, address quoteToken, uint256 strikePrice, , ) =
+            _core.getParameters(oid);
+
+        // Store amounts for gas savings
+        uint256 actualAmt = amounts[0]; // options exercised
+
+        // Check to see if underlying tokens were paid.
+        uint256 prevBal = _universalDebt[baseToken];
+        uint256 currBal = IERC20(baseToken).balanceOf(address(this));
+
+        // Check to see if strikePrice were paid.
+        uint256 prevStrikeBal = _universalDebt[quoteToken];
+        uint256 currStrikeBal = IERC20(quoteToken).balanceOf(address(this));
+
+        // IMPORTANT: Require baseTokenDiff + quoteTokenDiff.div(strikePrice) >= actualAmt
+
+        // Calculate the differences.
+        uint256 inputQuote = currStrikeBal.sub(prevStrikeBal);
+        uint256 inputBase = currBal.sub(prevBal.sub(actualAmt)); // will be > 0 if baseTokens are returned.
+
+        // Either baseTokens or quoteTokens must be sent into the contract.
+        require(inputQuote > 0 || inputBase > 0, "House: NO_PAYMENT");
+
+        // Calculate the remaining amount of baseTokens that needs to be paid for.
+        uint256 remainder =
+            inputBase > actualAmt ? 0 : actualAmt.sub(inputBase);
+
+        // Calculate the expected payment of quoteTokens.
+        uint256 payment = remainder.mul(strikePrice).div(1 ether);
+
+        // Enforce the invariants.
+        require(inputQuote >= payment, "House: QUOTE_PAYMENT");
+        return true;
+    }
+
+    function settleInvariant(bytes memory oid) public view returns (bool) {
+        // Settle:      Burn short, require(!notExpired), push remaining base and quote tokens.
+        return expiryInvariant(oid);
+    }
+
+    function redeemInvariant(bytes memory oid) public view returns (bool) {
+        // Redeem:      Burn short, require(notExpired), push `amount`*strikePrice quote tokens.
+        return expiryInvariant(oid);
+    }
+
+    /**
+     * @notice  An invartiant rule implementation which is called by `_core` when option closing occurs.
+     * @dev     Warning: this implementation is critical to the solvency of the option tokens.
+     * @param   oid The option id which will be used for checking the invariants.
+     * @param   amounts The amounts of [long, short] options to burn.
+     * @return  Whether or not the invariant checks succeeded.
+     */
+    function closeInvariant(bytes memory oid, uint256[] memory amounts)
         public
         view
         override
         isExec
         returns (bool)
     {
-        return true;
+        // Close        Burn long and short, require(!notExpired), push `amount` base tokens.
+        uint256 amount0 = amounts[0];
+        uint256 amount1 = amounts[1];
+
+        // Get the parameters of the option
+        (address baseToken, address quoteToken, uint256 strikePrice, , ) =
+            _core.getParameters(oid);
+
+        uint256 prevBal = _universalDebt[baseToken];
+        uint256 currBal = IERC20(baseToken).balanceOf(address(this));
+
+        Account storage acc = _accounts[getExecutingNonce()];
+        require(acc.delta >= amount0, "House: CLOSE_FAIL");
+
+        return expiryInvariant(oid);
     }
 
     // ===== View =====

@@ -9,7 +9,7 @@ interface IOptionCore is IOptionData, IOptionDeployer {
         bytes calldata oid,
         uint256 amount,
         address[] calldata receivers
-    ) external returns (bool);
+    ) external returns (bool, uint256);
 
     function dangerousBurn(
         bytes calldata oid,

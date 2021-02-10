@@ -20,6 +20,9 @@ contract OptionCore is IOptionCore, OptionData {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
+    /**
+     * @notice Event emitted after a `dangerousMint` has succeeded.
+     */
     event OptionsMinted(
         address indexed from,
         uint256 amount,
@@ -27,6 +30,9 @@ contract OptionCore is IOptionCore, OptionData {
         address indexed shortReceiver
     );
 
+    /**
+     * @notice Event emitted after a `dangerousBurn` has succeeded.
+     */
     event OptionsBurned(
         address indexed from,
         uint256 longAmount,
@@ -35,8 +41,14 @@ contract OptionCore is IOptionCore, OptionData {
         address indexed shortReceiver
     );
 
+    /**
+     * @dev The higher-level managing contract for this option core.
+     */
     IManager internal immutable _manager;
 
+    /**
+     * @notice Only allow `_manager` to call functions with this modifier.
+     */
     modifier onlyManager() {
         require(address(_manager) == msg.sender, "Core: NOT_MANAGER");
         _;
@@ -57,15 +69,16 @@ contract OptionCore is IOptionCore, OptionData {
      */
     function dangerousMint(
         bytes memory oid,
-        uint256 amount,
+        uint256 requestAmt,
         address[] memory receivers
-    ) public override returns (bool) {
+    ) public override returns (bool, uint256) {
         // mint invariant -> replace with a fn from option manager
-        bool success = _manager.mintingInvariant(oid);
-        require(success, "Core: MINT_FAIL");
-        _internalMint(oid, amount, receivers);
-        emit OptionsMinted(msg.sender, amount, receivers[0], receivers[1]);
-        return success;
+        (bool success, uint256 actualAmt) =
+            _manager.mintingInvariant(oid, requestAmt);
+        require(success && actualAmt >= requestAmt, "Core: MINT_FAIL");
+        _internalMint(oid, actualAmt, receivers);
+        emit OptionsMinted(msg.sender, actualAmt, receivers[0], receivers[1]);
+        return (success, actualAmt);
     }
 
     function _internalMint(
@@ -91,33 +104,40 @@ contract OptionCore is IOptionCore, OptionData {
         uint256[] memory amounts,
         address[] memory accounts
     ) public override returns (bool) {
-        // burn invariant -> replace with a fn from option manager
-        bool burnInvariant = _manager.burningInvariant(oid);
-        require(burnInvariant, "Core: BURN_FAIL");
+        uint256 amount0 = amounts[0];
+        uint256 amount1 = amounts[1];
+        require(
+            amount0 > uint256(0) && amount1 > uint256(0),
+            "Core: ZERO_BURN"
+        );
 
-        if (amounts[1] == uint256(0)) {
-            // if no short tokens are being burned, its an exercise.
-            bool exerciseInvariant = _manager.exerciseInvariant(oid);
-            // if exercise invariant is not cleared, returned the bubbled up error code.
-            require(exerciseInvariant, "Core: EXERCISE_FAIL");
-        }
-
-        if (amounts[0] == uint256(0)) {
+        bool invariant;
+        if (amount0 == uint256(0)) {
             // if no long tokens are being burned, its a settlement
-            bool settleInvariant = _manager.settlementInvariant(oid);
-            // if settlement invariant is not cleared, returned the bubbled up error code.
-            require(settleInvariant, "Core: SETTLE_FAIL");
+            invariant = _manager.settlementInvariant(oid);
+            // if settlement invariant is not cleared, revert.
+            require(invariant, "Core: SETTLE_FAIL");
+        } else if (amount1 == uint256(0)) {
+            // if no short tokens are being burned, its an exercise.
+            invariant = _manager.exerciseInvariant(oid, amounts);
+            // if exercise invariant is not cleared, revert.
+            require(invariant, "Core: EXERCISE_FAIL");
+        } else {
+            // if short and long tokens are burned, its a close.
+            invariant = _manager.closeInvariant(oid, amounts);
+            // if close invariant is not cleared, revert.
+            require(invariant, "Core: CLOSE_FAIL");
         }
 
         _internalBurn(oid, amounts, accounts);
         emit OptionsBurned(
             msg.sender,
-            amounts[0],
-            amounts[1],
+            amount0,
+            amount1,
             accounts[0],
             accounts[1]
         );
-        return burnInvariant;
+        return invariant;
     }
 
     function _internalBurn(
