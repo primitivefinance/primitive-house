@@ -27,7 +27,7 @@ contract VERC20 is PrimitiveERC20, IVERC20 {
 
     function mint(address to, uint256 quantity)
         external
-        override
+        override (IVERC20, PrimitiveERC20)
         onlyHouse
         returns (bool)
     {
@@ -37,7 +37,7 @@ contract VERC20 is PrimitiveERC20, IVERC20 {
 
     function burn(address to, uint256 quantity)
         external
-        override
+        override (IVERC20, PrimitiveERC20)
         onlyHouse
         returns (bool)
     {

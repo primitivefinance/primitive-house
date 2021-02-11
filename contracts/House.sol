@@ -622,6 +622,26 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
 
     // ====== Invariant Rules ======
 
+    // @notice  A stub of the invariant rule which is called when option burning occurs.
+    function burningInvariant(bytes calldata oid, uint256[] calldata amounts)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return false;
+    }
+
+    // @notice  A stub of the invariant rule which is called when settlement occurs.
+    function settlementInvariant(bytes calldata oid)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return false;
+    }
+
     /**
      * @notice  An invartiant rule implementation which is called by `_core` when option minting occurs.
      * @dev     Warning: this implementation is critical to the solvency of the option tokens.
@@ -631,7 +651,6 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      */
     function mintingInvariant(bytes memory oid, uint256 requestAmt)
         public
-        view
         override
         isExec
         returns (bool, uint256)
@@ -801,7 +820,6 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      */
     function closeInvariant(bytes memory oid, uint256[] memory amounts)
         public
-        view
         override
         isExec
         returns (bool)

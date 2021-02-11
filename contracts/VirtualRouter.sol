@@ -1,4 +1,4 @@
-pragma solidity >=0.6.2;
+pragma solidity ^0.6.2;
 
 /**
  * @title   Primitive Virtual Router -> Safe interfacing with virtual options.
