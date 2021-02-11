@@ -6,17 +6,12 @@ interface IManager {
         view
         returns (bool, uint256);
 
-    function burningInvariant(bytes calldata oid, uint256[] calldata amounts)
+    function exerciseInvariant(bytes calldata oid, uint256 amount)
         external
         view
         returns (bool);
 
-    function exerciseInvariant(bytes calldata oid, uint256[] calldata amounts)
-        external
-        view
-        returns (bool);
-
-    function settlementInvariant(bytes calldata oid)
+    function settlementInvariant(bytes calldata oid, uint256 amount)
         external
         view
         returns (bool);

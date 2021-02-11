@@ -11,19 +11,13 @@ abstract contract Manager {
         virtual
         returns (bool, uint256);
 
-    function burningInvariant(bytes calldata oid, uint256[] calldata amounts)
+    function exerciseInvariant(bytes calldata oid, uint256 amount)
         external
         view
         virtual
         returns (bool);
 
-    function exerciseInvariant(bytes calldata oid, uint256[] calldata amounts)
-        external
-        view
-        virtual
-        returns (bool);
-
-    function settlementInvariant(bytes calldata oid)
+    function settlementInvariant(bytes calldata oid, uint256 amount)
         external
         view
         virtual

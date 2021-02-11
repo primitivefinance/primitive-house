@@ -16,4 +16,16 @@ interface IOptionCore is IOptionData, IOptionDeployer {
         uint256[] calldata amounts,
         address[] calldata accounts
     ) external returns (bool);
+
+    function dangerousLongBurn(
+        bytes calldata oid,
+        uint256 amount,
+        address account
+    ) external returns (bool);
+
+    function dangerousShortBurn(
+        bytes calldata oid,
+        uint256 amount,
+        address account
+    ) external returns (bool);
 }

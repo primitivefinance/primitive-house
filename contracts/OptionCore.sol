@@ -99,7 +99,7 @@ contract OptionCore is IOptionCore, OptionData {
     /**
      * @dev Burn the `oid` option tokens using the burningInvariant function.
      */
-    function dangerousBurn(
+    /* function dangerousBurn(
         bytes memory oid,
         uint256[] memory amounts,
         address[] memory accounts
@@ -114,7 +114,7 @@ contract OptionCore is IOptionCore, OptionData {
         bool invariant;
         if (amount0 == uint256(0)) {
             // if no long tokens are being burned, its a settlement
-            invariant = _manager.settlementInvariant(oid);
+            invariant = _manager.settlementInvariant(oid, amounts);
             // if settlement invariant is not cleared, revert.
             require(invariant, "Core: SETTLE_FAIL");
         } else if (amount1 == uint256(0)) {
@@ -138,6 +138,79 @@ contract OptionCore is IOptionCore, OptionData {
             accounts[1]
         );
         return invariant;
+    } */
+
+    function dangerousBurn(
+        bytes memory oid,
+        uint256[] memory amounts,
+        address[] memory accounts
+    ) public override returns (bool) {
+        uint256 amount0 = amounts[0];
+        uint256 amount1 = amounts[1];
+        require(
+            amount0 > uint256(0) && amount1 > uint256(0),
+            "Core: ZERO_BURN"
+        );
+
+        // if short and long tokens are burned, its a close.
+        bool invariant = _manager.closeInvariant(oid, amounts);
+        // if close invariant is not cleared, revert.
+        require(invariant, "Core: CLOSE_FAIL");
+
+        _internalBurn(oid, amounts, accounts);
+        emit OptionsBurned(
+            msg.sender,
+            amount0,
+            amount1,
+            accounts[0],
+            accounts[1]
+        );
+        return invariant;
+    }
+
+    function dangerousLongBurn(
+        bytes memory oid,
+        uint256 amount,
+        address account
+    ) public override returns (bool) {
+        require(amount > uint256(0), "Core: ZERO_BURN");
+        // if no short tokens are being burned, its an exercise.
+        bool invariant = _manager.exerciseInvariant(oid, amount);
+        // if exercise invariant is not cleared, revert.
+        require(invariant, "Core: EXERCISE_FAIL");
+        _internalLongBurn(oid, amount, account);
+        emit OptionsBurned(
+            msg.sender,
+            amount,
+            uint256(0),
+            account,
+            address(0x0)
+        );
+        return invariant;
+    }
+
+    function dangerousShortBurn(
+        bytes memory oid,
+        uint256 amount,
+        address account
+    ) public override returns (bool) {
+        require(amount > uint256(0), "Core: ZERO_BURN");
+
+        // if no long tokens are being burned, its a settlement
+        bool invariant = _manager.settlementInvariant(oid, amount);
+        // if settlement invariant is not cleared, revert.
+        require(invariant, "Core: SETTLE_FAIL");
+
+        _internalShortBurn(oid, amount, account);
+        emit OptionsBurned(
+            msg.sender,
+            uint256(0),
+            amount,
+            address(0x0),
+            account
+        );
+
+        return invariant;
     }
 
     function _internalBurn(
@@ -155,6 +228,24 @@ contract OptionCore is IOptionCore, OptionData {
         bool shortSuccess =
             IPrimitiveERC20(data.shortToken).burn(shortHolder, shortAmount);
         return success && shortSuccess;
+    }
+
+    function _internalLongBurn(
+        bytes memory oid,
+        uint256 amount,
+        address account
+    ) internal returns (bool) {
+        TokenData memory data = _tokenData[oid];
+        return IPrimitiveERC20(data.longToken).burn(account, amount);
+    }
+
+    function _internalShortBurn(
+        bytes memory oid,
+        uint256 amount,
+        address account
+    ) internal returns (bool) {
+        TokenData memory data = _tokenData[oid];
+        return IPrimitiveERC20(data.shortToken).burn(account, amount);
     }
 
     // ===== View =====

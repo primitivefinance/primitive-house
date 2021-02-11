@@ -53,7 +53,17 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      * @notice Event emitted after a `_universalDebt` balance has been updated.
      */
     event UpdatedUniversalDebt(
-        uint256 accountNonce,
+        uint256 indexed accountNonce,
+        address indexed token,
+        uint256 newBalance
+    );
+
+    /**
+     * @notice Event emitted after a `_strikeClaim` balance has been updated.
+     */
+    event UpdatedQuoteClaim(
+        uint256 indexed accountNonce,
+        address indexed shortOption,
         address indexed token,
         uint256 newBalance
     );
@@ -146,6 +156,11 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      *      _universalDebt[token] = amount.
      */
     mapping(address => uint256) internal _universalDebt;
+
+    /**
+     * @dev The amount of quote tokens that are claimable by short option tokens.
+     */
+    mapping(address => mapping(address => uint256)) internal _quoteClaim;
 
     modifier isEndorsed(address venue_) {
         require(_capitol.getIsEndorsed(venue_), "House: NOT_ENDORSED");
@@ -336,9 +351,17 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         internal
         isExec
     {
-        uint256 prevBal = _universalDebt[token];
         _universalDebt[token] = newBalance;
         emit UpdatedUniversalDebt(_NONCE, token, newBalance);
+    }
+
+    function _quoteClaimUpdate(
+        address shortOption,
+        address token,
+        uint256 newBalance
+    ) internal isExec {
+        _quoteClaim[shortOption][token] = newBalance;
+        emit UpdatedQuoteClaim(_NONCE, shortOption, token, newBalance);
     }
 
     function _addAccountDebt(uint256 amount) internal isExec returns (bool) {
@@ -375,7 +398,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         (bool success, uint256 actual) =
             _core.dangerousMint(oid, requestAmt, receivers);
 
-        // Internal update
+        // Update internal base token balance
         (address baseToken, , , , ) = _core.getParameters(oid);
         uint256 newBalance = _universalDebt[baseToken].add(actual);
         _internalUpdate(baseToken, newBalance);
@@ -429,6 +452,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         _core.dangerousBurn(oid, amounts, holders);
         // Update the underlying debt by subtracting the option requestAmt
         uint256 accDebt = acc.debt;
+        // if request is greater than debt, set debt to 0
         acc.debt = requestAmt > accDebt ? uint256(0) : accDebt.sub(requestAmt);
         // Update internally tracked baseToken balance
         (address baseToken, , , , ) = _core.getParameters(oid);
@@ -462,6 +486,8 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         (address baseToken, address quoteToken, , , ) =
             _core.getParameters(oid);
 
+        (, address shortOption) = _core.getTokenData(oid);
+
         // Optimistically transfer base ERC20 tokens to receiver
         IERC20(baseToken).safeTransfer(receiver, requestAmt);
         // Trigger flash callback if data argument exists
@@ -471,16 +497,92 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         // Burn `requestAmt` of long options.
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = requestAmt;
-        // Burn the options, which will call the burningInvariant() function in this contract.
+        // Burn the options, which will call the respective invariant() functions in this contract.
         _core.dangerousBurn(oid, amounts, holders);
 
-        // Get the base token balance
+        // Get the current base and quote token balances
         uint256 currBal = IERC20(baseToken).balanceOf(address(this));
-        // Get the strike token balance
-        uint256 currStrikeBal = IERC20(quoteToken).balanceOf(address(this));
+        uint256 currQuoteBal = IERC20(quoteToken).balanceOf(address(this));
+
+        // this is 3xSStores, expensive
+
         // Update both token balances
         _internalUpdate(baseToken, currBal);
-        _internalUpdate(quoteToken, currStrikeBal);
+        // Update claimable quote tokens
+        _quoteClaimUpdate(
+            shortOption,
+            quoteToken,
+            currQuoteBal.sub(_universalDebt[quoteToken])
+        );
+        // Update internal quote balance
+        _internalUpdate(quoteToken, currQuoteBal);
+        return true;
+    }
+
+    /**
+     * @notice Optimistically releases base and quote tokens, then burns the required amount of options.
+     */
+    function closeOptions(
+        bytes memory oid,
+        uint256[] memory amounts,
+        address[] memory receivers,
+        address[] memory holders
+    ) public isEndorsed(msg.sender) isExec returns (bool) {
+        // Optimistically transfer out amounts
+        // Get the account that is being updated
+        Account storage acc = _accounts[getExecutingNonce()];
+
+        // Store params in memory for gas savings
+        (address baseToken, address quoteToken, uint256 strikePrice, , ) =
+            _core.getParameters(oid);
+
+        (address longToken, address shortToken) = _core.getTokenData(oid);
+
+        uint256 quoteClaim = _quoteClaim[shortOption][quoteToken];
+        uint256 shortSupply = IERC20(shortToken).totalSupply();
+        uint256 longSupply = IERC20(longToken).totalSupply();
+
+        // Check to make sure the amount of base tokens can be sent out.
+        uint256 product = shortSupply.mul(longSupply).mul(strikePrice); // x * y * s = z
+        uint256 quoteProduct = quoteClaim.mul(shortSupply); // q * x = w
+        uint256 baseProduct = product.sub(quoteProduct); // z - w = b
+        uint256 baseClaim = baseProduct.div(longSupply); // b / y = i
+        uint256 scaledBaseClaim = baseClaim.div(strikePrice); // i / s = c
+
+        // Get the output amounts to transfer out. Quote tokens are scaled to be in denominations of the quote.
+        uint256 outputBase = amounts[0].mul(scaledBaseClaim).div(longSupply);
+        uint256 outputQuote = amounts[1].mul(quoteClaim).div(shortSupply);
+        require(
+            scaledBaseClaim >= outputBase && quoteClaim >= outputQuote,
+            "House: OUTPUTS"
+        );
+
+        IERC20(baseToken).safeTransfer(receivers[0], outputBase);
+        IERC20(quoteToken).safeTransfer(receivers[1], outputQuote);
+
+        // Set the delta to the requestAmt so that the invariant will check if the burn amount matches.
+        acc.delta = outputBase;
+
+        // Execute the burn, which checks settlement invariants
+        _core.dangerousBurn(oid, amounts, holders);
+
+        // Get the current base and quote token balances
+        uint256 currBal = IERC20(baseToken).balanceOf(address(this));
+        uint256 currQuoteBal = IERC20(quoteToken).balanceOf(address(this));
+
+        // Update the underlying debt by subtracting the option requestAmt
+        uint256 accDebt = acc.debt;
+        // if request is greater than debt, set debt to 0
+        acc.debt = outputBase > accDebt ? uint256(0) : accDebt.sub(outputBase);
+        // Reset the account delta
+        acc.delta = 0;
+
+        // Update internal base and quote token balances
+        _internalUpdate(baseToken, currBal);
+        // Update claimable quote tokens
+        _quoteClaimUpdate(shortOption, quoteToken, quoteClaim.sub(outputQuote));
+        // Update internal quote balance
+        _internalUpdate(quoteToken, currQuoteBal);
         return true;
     }
 
@@ -571,7 +673,10 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         return notExpired;
     }
 
-    function exerciseInvariant(bytes memory oid, uint256[] memory amounts)
+    /**
+     * @notice  An invariant that is checked when long option tokens are requested to be burned.
+     */
+    function exerciseInvariant(bytes memory oid, uint256 actualAmt)
         public
         view
         override
@@ -582,21 +687,18 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         (address baseToken, address quoteToken, uint256 strikePrice, , ) =
             _core.getParameters(oid);
 
-        // Store amounts for gas savings
-        uint256 actualAmt = amounts[0]; // options exercised
-
         // Check to see if underlying tokens were paid.
         uint256 prevBal = _universalDebt[baseToken];
         uint256 currBal = IERC20(baseToken).balanceOf(address(this));
 
         // Check to see if strikePrice were paid.
-        uint256 prevStrikeBal = _universalDebt[quoteToken];
-        uint256 currStrikeBal = IERC20(quoteToken).balanceOf(address(this));
+        uint256 prevQuoteBal = _universalDebt[quoteToken];
+        uint256 currQuoteBal = IERC20(quoteToken).balanceOf(address(this));
 
         // IMPORTANT: Require baseTokenDiff + quoteTokenDiff.div(strikePrice) >= actualAmt
 
         // Calculate the differences.
-        uint256 inputQuote = currStrikeBal.sub(prevStrikeBal);
+        uint256 inputQuote = currQuoteBal.sub(prevQuoteBal);
         uint256 inputBase = currBal.sub(prevBal.sub(actualAmt)); // will be > 0 if baseTokens are returned.
 
         // Either baseTokens or quoteTokens must be sent into the contract.
@@ -614,18 +716,84 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         return true;
     }
 
-    function settleInvariant(bytes memory oid) public view returns (bool) {
-        // Settle:      Burn short, require(!notExpired), push remaining base and quote tokens.
-        return expiryInvariant(oid);
-    }
+    /**
+     * @notice  An invariant that is checked when short option tokens are requested to be burned.
+     */
+    function settleInvariant(bytes memory oid, uint256 shortBurned)
+        public
+        view
+        returns (bool)
+    {
+        // Settle:      Burn short, push remaining base and quote tokens.
 
-    function redeemInvariant(bytes memory oid) public view returns (bool) {
-        // Redeem:      Burn short, require(notExpired), push `amount`*strikePrice quote tokens.
-        return expiryInvariant(oid);
+        // If the option is expired, push base and quote tokens remaining.
+        // Else, only push quote tokens.
+        (address baseToken, address quoteToken, uint256 strikePrice, , ) =
+            _core.getParameters(oid);
+        (address longToken, address shortToken) = _core.getTokenData(oid);
+
+        bool notExpired = expiryInvariant(oid);
+
+        // Actual balances
+        uint256 baseBalance = IERC20(baseToken).balanceOf(address(this));
+        uint256 quoteBalance = IERC20(quoteToken).balanceOf(address(this));
+
+        // Stored balances
+        uint256 prevBaseBal = _universalDebt[baseToken];
+        uint256 prevQuoteBal = _universalDebt[quoteToken];
+
+        // Total supply
+        uint256 longSupply = IERC20(longToken).totalSupply();
+        uint256 shortSupply = IERC20(shortToken).totalSupply();
+
+        // Quote claim
+        uint256 quoteClaim = _quoteClaim[shortToken][quoteToken];
+        uint256 baseClaim;
+        {
+            uint256 product = shortSupply.mul(longSupply).mul(strikePrice); // x * y * s = z
+            uint256 quoteProduct = quoteClaim.mul(shortSupply); // q * x = w
+            uint256 baseProduct = product.sub(quoteProduct); // z - w = b
+            uint256 unscaledBaseClaim = baseProduct.div(longSupply); // b / y = i
+            uint256 scaledBaseClaim = unscaledBaseClaim.div(strikePrice); // i / s = c
+            baseClaim = scaledBaseClaim;
+        }
+
+        // Current balances should be less than stored balances, since tokens were sent out prior to this call.
+        uint256 outputBase = prevBaseBal.sub(baseBalance);
+        uint256 outputQuote = prevQuoteBal.sub(quoteBalance);
+
+        // There are two settlements: post-expiry and pre-expiry.
+        // Pre-expiry settlement only occurs for American options, in the case where exercises happened early.
+        //
+        // For an option to be **pre-expiry settled**, there must be:
+        //
+        // claimable quote tokens = quoteTokensRedeemed * shortSupply / shortBurned
+        //
+        // For an option to be **post-expiry settled**, there must be:
+        //
+        // claimable quote tokens = quoteTokensRedeemed * shortSupply / shortBurned
+        //
+        // claimable base tokens = baseTokensRedeemed * shortSupply/ shortBurned
+
+        // If expired, then base and quote tokens have been released.
+        if (!notExpired) {
+            require(
+                baseClaim == outputBase.mul(shortSupply).div(shortBurned),
+                "House: BASE_INPUT"
+            );
+        }
+
+        // If not expired, then only quote tokens have been released.
+        require(
+            quoteClaim == outputQuote.mul(shortSupply).div(shortBurned),
+            "House: QUOTE_INPUT"
+        );
+
+        return true;
     }
 
     /**
-     * @notice  An invartiant rule implementation which is called by `_core` when option closing occurs.
+     * @notice  An invartiant which is called by `_core` when long + short option tokens are being burned.
      * @dev     Warning: this implementation is critical to the solvency of the option tokens.
      * @param   oid The option id which will be used for checking the invariants.
      * @param   amounts The amounts of [long, short] options to burn.
