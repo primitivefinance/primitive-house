@@ -62,13 +62,13 @@ contract OptionData is IOptionData, OptionDeployer {
         // Symbol = 'long/short' + 'call/put' + baseTokenSymbol
         (uint8 optionType, string memory optionStringType) =
             generateType(isCall);
-        string memory baseSymbol = IPrimitiveERC20(baseToken).symbol();
-        string memory optionSymbol =
-            string(abi.encodePacked(optionStringType, baseSymbol));
         string memory shortOptionSymbol =
-            string(abi.encodePacked("s", optionStringType, baseSymbol));
+            string(abi.encodePacked("s", optionStringType, IPrimitiveERC20(baseToken).symbol()));
         // Deploy erc-20 clones
-        address longToken = deployClone(NAME, optionSymbol);
+        address longToken = deployClone(
+            NAME, 
+            string(abi.encodePacked(optionStringType, IPrimitiveERC20(baseToken).symbol()))
+        );
         address shortToken = deployClone(NAME, shortOptionSymbol);
         // Option ID
         bytes memory oid =
