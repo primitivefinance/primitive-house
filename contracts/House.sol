@@ -549,7 +549,6 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      */
     function mintingInvariant(bytes memory oid, uint256 requestAmt)
         public
-        view
         override
         isExec
         returns (bool, uint256)
@@ -653,7 +652,6 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      */
     function closeInvariant(bytes memory oid, uint256[] memory amounts)
         public
-        view
         override
         isExec
         returns (bool)

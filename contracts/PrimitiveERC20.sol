@@ -62,8 +62,9 @@ contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
     }
 
     function mint(address to, uint256 value)
-        public
+        external
         override
+        virtual
         onlyOwner
         returns (bool)
     {
@@ -72,8 +73,9 @@ contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
     }
 
     function burn(address from, uint256 value)
-        public
+        external
         override
+        virtual
         onlyOwner
         returns (bool)
     {

@@ -7,12 +7,12 @@ contract TestERC20 is PrimitiveERC20 {
         _mint(msg.sender, totalSupply);
     }
 
-    function mint(address to, uint256 quantity) external returns (bool) {
+    function mint(address to, uint256 quantity) external override returns (bool) {
         _mint(to, quantity);
         return true;
     }
 
-    function burn(address to, uint256 quantity) external returns (bool) {
+    function burn(address to, uint256 quantity) external override returns (bool) {
         _burn(to, quantity);
         return true;
     }
