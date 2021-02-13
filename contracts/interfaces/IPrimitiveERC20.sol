@@ -1,8 +1,15 @@
-pragma solidity ^0.7.1;
+pragma solidity >=0.6.2;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface IPrimitiveERC20 is IERC20 {
+    function initialize(string calldata name_, string calldata symbol_)
+        external;
+
+    function mint(address to, uint256 value) external returns (bool);
+
+    function burn(address from, uint256 value) external returns (bool);
+
     function name() external view returns (string memory);
 
     function symbol() external view returns (string memory);

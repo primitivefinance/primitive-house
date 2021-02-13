@@ -8,8 +8,9 @@ pragma solidity ^0.7.1;
 
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract PrimitiveERC20 is IPrimitiveERC20 {
+contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
     using SafeMath for uint256;
 
     string private _name;
@@ -27,7 +28,10 @@ contract PrimitiveERC20 is IPrimitiveERC20 {
 
     constructor() {}
 
-    function initialize(string memory name_, string memory symbol_) public {
+    function initialize(string memory name_, string memory symbol_)
+        public
+        override
+    {
         uint256 chainId;
         assembly {
             chainId := chainid()
@@ -46,6 +50,7 @@ contract PrimitiveERC20 is IPrimitiveERC20 {
 
         _name = name_;
         _symbol = symbol_;
+        transferOwnership(msg.sender);
     }
 
     function name() public view override returns (string memory) {
@@ -54,6 +59,28 @@ contract PrimitiveERC20 is IPrimitiveERC20 {
 
     function symbol() public view override returns (string memory) {
         return _symbol;
+    }
+
+    function mint(address to, uint256 value)
+        external
+        override
+        virtual
+        onlyOwner
+        returns (bool)
+    {
+        _mint(to, value);
+        return true;
+    }
+
+    function burn(address from, uint256 value)
+        external
+        override
+        virtual
+        onlyOwner
+        returns (bool)
+    {
+        _burn(from, value);
+        return true;
     }
 
     function _mint(address to, uint256 value) internal {

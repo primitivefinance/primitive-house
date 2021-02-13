@@ -74,7 +74,7 @@
     "typescript": "^4.1.3"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^3.2.0",
+    "@openzeppelin/contracts": "3.4.0",
     "@primitivefi/contracts": "^0.4.2",
     "@primitivefi/v1-connectors": "^1.2.2",
     "@uniswap/v2-core": "^1.0.1",
