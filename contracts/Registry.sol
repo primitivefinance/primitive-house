@@ -6,14 +6,14 @@ pragma solidity ^0.7.1;
  * @author  Primitive
  */
 
-import {OptionDeployer} from "./OptionDeployer.sol";
+import {Factory} from "./Factory.sol";
 import {IPrimitiveERC20, IERC20} from "./interfaces/IPrimitiveERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 
-import {IOptionData} from "./interfaces/IOptionData.sol";
+import {IRegistry} from "./interfaces/IRegistry.sol";
 
-contract OptionData is IOptionData, OptionDeployer {
+contract Registry is IRegistry, Factory {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 

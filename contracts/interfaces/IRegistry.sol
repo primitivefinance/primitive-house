@@ -1,6 +1,6 @@
 pragma solidity ^0.7.1;
 
-interface IOptionData {
+interface IRegistry {
     function createOption(
         address baseToken,
         address quoteToken,
