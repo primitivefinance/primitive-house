@@ -3,6 +3,7 @@ pragma experimental ABIEncoderV2;
 
 /**
  * @title   The low-level contract for core option logic.
+ *          Holds option parameter data structures, and a token cloner.
  * @notice  Warning: This contract should only be called by higher-level contracts.
  * @author  Primitive
  */
@@ -19,27 +20,6 @@ import {IOptionCore} from "./interfaces/IOptionCore.sol";
 contract OptionCore is IOptionCore, OptionData {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
-
-    /**
-     * @notice Event emitted after a `dangerousMint` has succeeded.
-     */
-    event OptionsMinted(
-        address indexed from,
-        uint256 amount,
-        address indexed longReceiver,
-        address indexed shortReceiver
-    );
-
-    /**
-     * @notice Event emitted after a `dangerousBurn` has succeeded.
-     */
-    event OptionsBurned(
-        address indexed from,
-        uint256 longAmount,
-        uint256 shortAmount,
-        address indexed longReceiver,
-        address indexed shortReceiver
-    );
 
     /**
      * @dev The higher-level managing contract for this option core.
@@ -65,169 +45,97 @@ contract OptionCore is IOptionCore, OptionData {
     // ===== Option Core =====
 
     /**
-     * @dev Mint the `oid` option tokens to `receivers` using the mintingInvariant function.
+     * @dev Mint the `oid` long + short option tokens to `receivers` using the mintingInvariant function.
      */
     function dangerousMint(
         bytes memory oid,
-        uint256 requestAmt,
+        uint256 amount,
         address[] memory receivers
-    ) public override returns (bool, uint256) {
-        // mint invariant -> replace with a fn from option manager
-        (bool success, uint256 actualAmt) =
-            _manager.mintingInvariant(oid, requestAmt);
-        require(success && actualAmt >= requestAmt, "Core: MINT_FAIL");
-        _internalMint(oid, actualAmt, receivers);
-        emit OptionsMinted(msg.sender, actualAmt, receivers[0], receivers[1]);
-        return (success, actualAmt);
+    ) public override onlyManager returns (uint256) {
+        _internalMint(oid, amount, receivers);
+        return amount;
     }
 
     function _internalMint(
         bytes memory oid,
         uint256 amount,
         address[] memory receivers
-    ) internal returns (bool) {
+    ) internal {
         TokenData memory data = _tokenData[oid];
-        address longReceiver = receivers[0];
-        address shortReceiver = receivers[1];
-        bool success =
-            IPrimitiveERC20(data.longToken).mint(longReceiver, amount);
-        bool shortSuccess =
-            IPrimitiveERC20(data.shortToken).mint(shortReceiver, amount);
-        return success && shortSuccess;
+        IPrimitiveERC20(data.longToken).mint(receivers[0], amount);
+        IPrimitiveERC20(data.shortToken).mint(receivers[1], amount);
     }
 
     /**
-     * @dev Burn the `oid` option tokens using the burningInvariant function.
+     * @notice Long option tokens are burned on exercise.
      */
-    /* function dangerousBurn(
-        bytes memory oid,
-        uint256[] memory amounts,
-        address[] memory accounts
-    ) public override returns (bool) {
-        uint256 amount0 = amounts[0];
-        uint256 amount1 = amounts[1];
-        require(
-            amount0 > uint256(0) && amount1 > uint256(0),
-            "Core: ZERO_BURN"
-        );
-
-        bool invariant;
-        if (amount0 == uint256(0)) {
-            // if no long tokens are being burned, its a settlement
-            invariant = _manager.settlementInvariant(oid, amounts);
-            // if settlement invariant is not cleared, revert.
-            require(invariant, "Core: SETTLE_FAIL");
-        } else if (amount1 == uint256(0)) {
-            // if no short tokens are being burned, its an exercise.
-            invariant = _manager.exerciseInvariant(oid, amounts);
-            // if exercise invariant is not cleared, revert.
-            require(invariant, "Core: EXERCISE_FAIL");
-        } else {
-            // if short and long tokens are burned, its a close.
-            invariant = _manager.closeInvariant(oid, amounts);
-            // if close invariant is not cleared, revert.
-            require(invariant, "Core: CLOSE_FAIL");
-        }
-
-        _internalBurn(oid, amounts, accounts);
-        emit OptionsBurned(
-            msg.sender,
-            amount0,
-            amount1,
-            accounts[0],
-            accounts[1]
-        );
-        return invariant;
-    } */
-
-    function dangerousBurn(
-        bytes memory oid,
-        uint256[] memory amounts,
-        address[] memory accounts
-    ) public override returns (bool) {
-        uint256 amount0 = amounts[0];
-        uint256 amount1 = amounts[1];
-        require(
-            amount0 > uint256(0) && amount1 > uint256(0),
-            "Core: ZERO_BURN"
-        );
-
-        // if short and long tokens are burned, its a close.
-        bool invariant = _manager.closeInvariant(oid, amounts);
-        // if close invariant is not cleared, revert.
-        require(invariant, "Core: CLOSE_FAIL");
-
-        _internalBurn(oid, amounts, accounts);
-        emit OptionsBurned(
-            msg.sender,
-            amount0,
-            amount1,
-            accounts[0],
-            accounts[1]
-        );
-        return invariant;
-    }
-
-    function dangerousLongBurn(
+    function dangerousExercise(
         bytes memory oid,
         uint256 amount,
-        address account
-    ) public override returns (bool) {
-        require(amount > uint256(0), "Core: ZERO_BURN");
-        // if no short tokens are being burned, its an exercise.
-        bool invariant = _manager.exerciseInvariant(oid, amount);
-        // if exercise invariant is not cleared, revert.
-        require(invariant, "Core: EXERCISE_FAIL");
-        _internalLongBurn(oid, amount, account);
-        emit OptionsBurned(
-            msg.sender,
-            amount,
-            uint256(0),
-            account,
-            address(0x0)
+        uint256[] memory claimAmounts,
+        address burnedFrom
+    ) public override onlyManager returns (uint256[] memory) {
+        uint256 baseClaim = claimAmounts[0];
+        uint256 quoteClaim = claimAmounts[1];
+        _internalLongBurn(oid, amount, burnedFrom);
+        Parameters memory params = _parameters[oid];
+        // Recycle claimAmounts array
+        claimAmounts[0] = baseClaim.sub(amount);
+        claimAmounts[1] = quoteClaim.add(
+            amount.mul(params.strikePrice).div(1 ether)
         );
-        return invariant;
+        return claimAmounts;
     }
 
-    function dangerousShortBurn(
+    /**
+     * @notice Short option tokens are burned.
+     */
+    function dangerousSettle(
         bytes memory oid,
         uint256 amount,
-        address account
-    ) public override returns (bool) {
-        require(amount > uint256(0), "Core: ZERO_BURN");
+        uint256[] memory claimAmounts,
+        address burnFrom
+    ) public override onlyManager returns (uint256[] memory) {
+        _internalShortBurn(oid, amount, burnFrom);
+        // Subtract proportional amounts of each amount.
+        TokenData memory data = _tokenData[oid];
+        uint256 shortSupply = IERC20(data.shortToken).totalSupply();
+        uint256 baseClaim = claimAmounts[0];
+        uint256 quoteClaim = claimAmounts[1];
+        claimAmounts[0] = baseClaim.mul(shortSupply).div(amount);
+        claimAmounts[1] = quoteClaim.mul(shortSupply).div(amount);
+        return claimAmounts;
+    }
 
-        // if no long tokens are being burned, its a settlement
-        bool invariant = _manager.settlementInvariant(oid, amount);
-        // if settlement invariant is not cleared, revert.
-        require(invariant, "Core: SETTLE_FAIL");
-
-        _internalShortBurn(oid, amount, account);
-        emit OptionsBurned(
-            msg.sender,
-            uint256(0),
-            amount,
-            address(0x0),
-            account
-        );
-
-        return invariant;
+    /**
+     * @notice Long and short option tokens are burned.
+     */
+    function dangerousClose(
+        bytes memory oid,
+        uint256[] memory amounts,
+        uint256[] memory claimAmounts,
+        address[] memory accounts
+    ) public override onlyManager returns (uint256[] memory) {
+        _internalBurn(oid, amounts, accounts);
+        // Subtract proportional amounts of each amount.
+        TokenData memory data = _tokenData[oid];
+        uint256 shortSupply = IERC20(data.shortToken).totalSupply();
+        uint256 longSupply = IERC20(data.longToken).totalSupply();
+        uint256 baseClaim = claimAmounts[0];
+        uint256 quoteClaim = claimAmounts[1];
+        claimAmounts[0] = baseClaim.mul(longSupply).div(amounts[0]);
+        claimAmounts[1] = quoteClaim.mul(shortSupply).div(amounts[1]);
+        return claimAmounts;
     }
 
     function _internalBurn(
         bytes memory oid,
         uint256[] memory amounts,
         address[] memory accounts
-    ) internal returns (bool) {
+    ) internal {
         TokenData memory data = _tokenData[oid];
-        address longHolder = accounts[0];
-        address shortHolder = accounts[1];
-        uint256 longAmount = amounts[0];
-        uint256 shortAmount = amounts[1];
-        bool success =
-            IPrimitiveERC20(data.longToken).burn(longHolder, longAmount);
-        bool shortSuccess =
-            IPrimitiveERC20(data.shortToken).burn(shortHolder, shortAmount);
-        return success && shortSuccess;
+        IPrimitiveERC20(data.longToken).burn(accounts[0], amounts[0]);
+        IPrimitiveERC20(data.shortToken).burn(accounts[1], amounts[1]);
     }
 
     function _internalLongBurn(
@@ -249,4 +157,16 @@ contract OptionCore is IOptionCore, OptionData {
     }
 
     // ===== View =====
+
+    function getOptionBalances(bytes memory oid, address account)
+        public
+        view
+        returns (uint256[] memory)
+    {
+        TokenData memory data = _tokenData[oid];
+        uint256[] memory balances = new uint256[](2);
+        balances[0] = IERC20(data.longToken).balanceOf(account);
+        balances[1] = IERC20(data.shortToken).balanceOf(account);
+        return balances;
+    }
 }

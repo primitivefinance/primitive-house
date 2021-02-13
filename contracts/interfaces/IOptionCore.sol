@@ -9,23 +9,31 @@ interface IOptionCore is IOptionData, IOptionDeployer {
         bytes calldata oid,
         uint256 amount,
         address[] calldata receivers
-    ) external returns (bool, uint256);
+    ) external returns (uint256);
 
-    function dangerousBurn(
+    function dangerousExercise(
+        bytes calldata oid,
+        uint256 amount,
+        uint256[] calldata claimAmounts,
+        address burnedFrom
+    ) external returns (uint256[] calldata);
+
+    function dangerousSettle(
+        bytes calldata oid,
+        uint256 amount,
+        uint256[] calldata claimAmounts,
+        address burnFrom
+    ) external returns (uint256[] calldata);
+
+    function dangerousClose(
         bytes calldata oid,
         uint256[] calldata amounts,
+        uint256[] calldata claimAmounts,
         address[] calldata accounts
-    ) external returns (bool);
+    ) external returns (uint256[] calldata);
 
-    function dangerousLongBurn(
-        bytes calldata oid,
-        uint256 amount,
-        address account
-    ) external returns (bool);
-
-    function dangerousShortBurn(
-        bytes calldata oid,
-        uint256 amount,
-        address account
-    ) external returns (bool);
+    function getOptionBalances(bytes calldata oid, address account)
+        external
+        view
+        returns (uint256[] calldata);
 }

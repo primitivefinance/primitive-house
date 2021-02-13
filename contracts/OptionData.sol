@@ -63,12 +63,24 @@ contract OptionData is IOptionData, OptionDeployer {
         (uint8 optionType, string memory optionStringType) =
             generateType(isCall);
         string memory shortOptionSymbol =
-            string(abi.encodePacked("s", optionStringType, IPrimitiveERC20(baseToken).symbol()));
+            string(
+                abi.encodePacked(
+                    "s",
+                    optionStringType,
+                    IPrimitiveERC20(baseToken).symbol()
+                )
+            );
         // Deploy erc-20 clones
-        address longToken = deployClone(
-            NAME, 
-            string(abi.encodePacked(optionStringType, IPrimitiveERC20(baseToken).symbol()))
-        );
+        address longToken =
+            deployClone(
+                NAME,
+                string(
+                    abi.encodePacked(
+                        optionStringType,
+                        IPrimitiveERC20(baseToken).symbol()
+                    )
+                )
+            );
         address shortToken = deployClone(NAME, shortOptionSymbol);
         // Option ID
         bytes memory oid =
@@ -127,6 +139,10 @@ contract OptionData is IOptionData, OptionDeployer {
             params.expiry,
             params.optionType
         );
+    }
+
+    function getAllOptionIdsLength() public view returns (uint256) {
+        return allOptionIds.length;
     }
 
     // ===== Pure =====

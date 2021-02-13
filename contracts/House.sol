@@ -50,6 +50,27 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
     event Executed(address indexed from, address indexed venue);
 
     /**
+     * @notice Event emitted after a `dangerousMint` has succeeded.
+     */
+    event OptionsMinted(
+        address indexed from,
+        uint256 amount,
+        address indexed longReceiver,
+        address indexed shortReceiver
+    );
+
+    /**
+     * @notice Event emitted after a `dangerousBurn` has succeeded.
+     */
+    event OptionsBurned(
+        address indexed from,
+        uint256 longAmount,
+        uint256 shortAmount,
+        address indexed longReceiver,
+        address indexed shortReceiver
+    );
+
+    /**
      * @notice Event emitted after a `_universalDebt` balance has been updated.
      */
     event UpdatedUniversalDebt(
@@ -395,12 +416,11 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         address[] memory receivers
     ) public isEndorsed(msg.sender) isExec returns (bool) {
         // Execute the mint
-        (bool success, uint256 actual) =
-            _core.dangerousMint(oid, requestAmt, receivers);
+        _core.dangerousMint(oid, requestAmt, receivers); // calls mintingInvariant()
 
         // Update internal base token balance
         (address baseToken, , , , ) = _core.getParameters(oid);
-        uint256 newBalance = _universalDebt[baseToken].add(actual);
+        uint256 newBalance = _universalDebt[baseToken].add(requestAmt);
         _internalUpdate(baseToken, newBalance);
         return true;
     }
@@ -416,18 +436,17 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         bytes memory oid,
         uint256 requestAmt,
         address[] memory receivers
-    ) public isEndorsed(msg.sender) isExec returns (bool, uint256) {
+    ) public isEndorsed(msg.sender) isExec returns (uint256) {
         // Get the account that is being updated
         Account storage acc = _accounts[getExecutingNonce()];
         // Update the acc delta
         acc.delta = requestAmt;
         // Update acc debt balance
         acc.balance = acc.balance.add(requestAmt);
-        (bool success, uint256 actualAmt) =
-            _core.dangerousMint(oid, requestAmt, receivers);
+        uint256 actualAmt = _core.dangerousMint(oid, requestAmt, receivers);
         // Reset delta by subtracting from actual amount borrowed
         acc.delta = actualAmt.sub(acc.delta);
-        return (success, actualAmt);
+        return actualAmt;
     }
 
     /**
@@ -475,7 +494,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         address receiver,
         bytes memory oid,
         uint256 requestAmt,
-        address[] memory holders,
+        address burnFrom,
         bytes memory data
     ) public isEndorsed(msg.sender) isExec returns (bool) {
         // Get the account that is being updated
@@ -494,11 +513,12 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         if (data.length > 0)
             IFlash(receiver).primitiveFlash(msg.sender, requestAmt, data);
 
-        // Burn `requestAmt` of long options.
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = requestAmt;
-        // Burn the options, which will call the respective invariant() functions in this contract.
-        _core.dangerousBurn(oid, amounts, holders);
+        uint256[] memory claimAmounts = new uint256[](2);
+        claimAmounts[0] = IERC20(baseToken).balanceOf(address(this));
+        uint quoteClaim = _quoteClaim[shortOption][quoteToken]
+        claimAmounts[1] = quoteClaim;
+        // Recycle claim amounts array
+        claimAmounts =  _core.dangerousExercise(oid, requestAmt, claimAmounts, burnFrom);
 
         // Get the current base and quote token balances
         uint256 currBal = IERC20(baseToken).balanceOf(address(this));
@@ -512,7 +532,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         _quoteClaimUpdate(
             shortOption,
             quoteToken,
-            currQuoteBal.sub(_universalDebt[quoteToken])
+            quoteClaim.sub(claimAmounts[1])
         );
         // Update internal quote balance
         _internalUpdate(quoteToken, currQuoteBal);
@@ -661,13 +681,18 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         // Check the previous baseToken balance against the current balance.
         uint256 prevBal = _universalDebt[baseToken];
         uint256 currBal = IERC20(baseToken).balanceOf(address(this));
+        // Fail early if this contract does not have enough base tokens to send out.
+        require(currBal >= requestAmt, "House: MINT_AMOUNT");
+        // Calculate the difference.
         uint256 actualAmt = currBal.sub(prevBal);
         // If there's a difference, return true and the actualAmt.
         bool internalUpdated = actualAmt >= requestAmt;
-        // Fail early if this contract does not have enough base tokens
-        require(currBal >= requestAmt, "House: MINT_AMOUNT");
-        // If there is no actualAmt, require the acc delta to be greater than 0, and return delta as actualAmt
+        // If no tokens were sent in, internalUpdated will be false, triggering this if statement.
         if (!internalUpdated) {
+            // Get the account `delta` in the state.
+            // `delta` is the amount added to an account's debt balance during isExec.
+            // Return true if delta is nonZero, along with the delta value, which will be the
+            // actual amount to mint.
             Account memory acc = _accounts[_NONCE];
             uint256 delta = acc.delta;
             return (delta > 0, delta);
