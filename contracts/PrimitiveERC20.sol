@@ -10,7 +10,7 @@ import {SafeMath} from "./libraries/SafeMath.sol";
 import {IPrimitiveERC20} from "./interfaces/IPrimitiveERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
+contract PrimitiveERC20 is IPrimitiveERC20 {
     using SafeMath for uint256;
 
     string private _name;
@@ -25,6 +25,23 @@ contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
     bytes32 public constant override PERMIT_TYPEHASH =
         0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
     mapping(address => uint256) public override nonces;
+
+    address public _factory;
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _factory;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        require(owner() == msg.sender, "Ownable: caller is not the owner");
+        _;
+    }
 
     constructor() {}
 
@@ -50,7 +67,7 @@ contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
 
         _name = name_;
         _symbol = symbol_;
-        transferOwnership(msg.sender);
+        _factory = msg.sender;
     }
 
     function name() public view override returns (string memory) {
@@ -63,8 +80,8 @@ contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
 
     function mint(address to, uint256 value)
         external
-        override
         virtual
+        override
         onlyOwner
         returns (bool)
     {
@@ -74,8 +91,8 @@ contract PrimitiveERC20 is IPrimitiveERC20, Ownable {
 
     function burn(address from, uint256 value)
         external
-        override
         virtual
+        override
         onlyOwner
         returns (bool)
     {

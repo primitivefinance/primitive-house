@@ -1,42 +1,62 @@
 pragma solidity >=0.6.2;
 
 interface IHouse {
-    function virtualOptions(address optionAddress)
-        external
-        view
-        returns (address);
+    function addCollateral(
+        address wrappedToken,
+        uint256 wrappedId,
+        uint256 amount
+    ) external returns (uint256);
 
-    // Creates virtual options without collateral.
-    function mintVirtualOptions(
-        address optionAddress,
-        uint256 quantity,
-        address longReceiver,
-        address shortReceiver
-    ) external;
-
-    // Burns virtual options.
-    function burnVirtualOptions(
-        address optionAddress,
-        uint256 quantity,
-        address receiver
-    ) external;
-
-    // Deposits tokens as collateral to the House.
-    function addTokens(
-        address depositor,
-        address[] calldata tokens,
-        uint256[] calldata amounts
+    function removeCollateral(
+        address wrappedToken,
+        uint256 wrappedId,
+        uint256 amount
     ) external returns (bool);
 
-    // Withdraws tokens from collateral stored the House.
-    function removeTokens(
-        address withdrawee,
-        address[] calldata tokens,
-        uint256[] calldata amounts
+    function mintOptions(
+        bytes32 oid,
+        uint256 requestAmt,
+        address[] calldata receivers
+    ) external returns (bool);
+
+    function exercise(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) external returns (bool);
+
+    function redeem(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) external returns (bool);
+
+    function close(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
     ) external returns (bool);
 
     function takeTokensFromUser(address token, uint256 quantity) external;
 
     // ==== View ====
-    function CALLER() external view returns (address);
+    function getExecutingCaller() external view returns (address);
+
+    function getOptionTokens(bytes32 oid) external returns (address, address);
+
+    function getParameters(bytes32 oid)
+        external
+        view
+        returns (
+            address,
+            address,
+            uint256,
+            uint32,
+            uint8
+        );
+
+    function getCore() external view returns (address);
 }

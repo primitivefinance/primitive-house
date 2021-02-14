@@ -25,10 +25,17 @@ import {IHouse} from "./interfaces/IHouse.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {Manager} from "./Manager.sol";
+import {pERC1155Receiver} from "./utils/pERC1155Receiver.sol";
 
 import "hardhat/console.sol";
 
-contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
+contract House is
+    Manager,
+    Ownable,
+    Accelerator,
+    ReentrancyGuard,
+    pERC1155Receiver
+{
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -176,6 +183,11 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      */
     mapping(address => mapping(address => uint256)) internal _quoteClaim;
 
+    /**
+     * @dev The options -> token -> amount claim.
+     */
+    mapping(bytes32 => mapping(address => uint256)) internal _houseBalance;
+
     modifier isEndorsed(address venue_) {
         //require(_capitol.getIsEndorsed(venue_), "House: NOT_ENDORSED");
         _;
@@ -187,7 +199,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
     modifier isExec() {
         require(_NONCE != _NO_NONCE, "House: NO_NONCE");
         require(_CALLER != _NO_ADDRESS, "House: NO_ADDRESS");
-        require(_VENUE != msg.sender, "House: NO_VENUE");
+        require(_VENUE == msg.sender, "House: NO_VENUE");
         require(!_EXECUTING, "House: IN_EXECUTION");
         _EXECUTING = true;
         _;
@@ -199,6 +211,10 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         _core = ICore(optionCore_);
     }
 
+    function setCore(address core_) public onlyOwner {
+        _core = ICore(core_);
+    }
+
     // ====== Transfers ======
 
     /**
@@ -208,8 +224,15 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      * @return  Whether or not the transfer succeeded.
      */
     function takeTokensFromUser(address token, uint256 amount)
-        external
+        public
         isExec
+        returns (bool)
+    {
+        return _takeTokensFromUser(token, amount);
+    }
+
+    function _takeTokensFromUser(address token, uint256 amount)
+        internal
         returns (bool)
     {
         IERC20(token).safeTransferFrom(
@@ -286,11 +309,15 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
     ) internal returns (uint256) {
         Account storage acc = _accounts[getExecutingNonce()];
         if (acc.wrappedToken != token || acc.wrappedId != wid) {
+            console.log("initializing collateral");
             _initializeCollateral(acc, token, wid);
         }
+
+        console.log("pull wrapped tokens");
         // Pull the tokens
         uint256 actualAmount = _internalWrappedTransfer(token, wid, amount);
         require(actualAmount > 0, "House: ADD_ZERO");
+        console.log("add to account balance");
         // Add the tokens to the executing account state
         acc.balance = acc.balance.add(amount);
         emit CollateralDeposited(_NONCE, token, wid, amount);
@@ -309,7 +336,9 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         address token,
         uint256 wid
     ) internal returns (bool) {
+        console.log("acc balance", acc.balance);
         require(acc.balance == uint256(0), "House: INITIALIZED");
+        console.log("setting account wrapped token and id");
         acc.wrappedToken = token;
         acc.wrappedId = wid;
         return true;
@@ -328,8 +357,10 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         uint256 wrappedId,
         uint256 amount
     ) public isExec returns (bool) {
+        console.log("house: internal removal");
         // Remove wrappedTokens from account state
         bool success = _removeCollateral(wrappedToken, wrappedId, amount);
+        console.log("house: safetransferfrom this to msgsender");
         // Push the wrappedTokens to the msg.sender.
         IERC1155(wrappedToken).safeTransferFrom(
             address(this),
@@ -348,22 +379,21 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         uint256 amount
     ) internal returns (bool) {
         Account storage acc = _accounts[getExecutingNonce()];
+        console.log("checking wrapped token and id");
         require(acc.wrappedId == wip, "House: INVALID_ID");
         require(acc.wrappedToken == token, "House: INVALID_TOKEN");
         uint256 balance = acc.balance;
         if (amount == uint256(-1)) {
             amount = balance;
         }
+        console.log("house: acc.balance sub amount", acc.balance, amount);
         acc.balance = acc.balance.sub(amount);
         return true;
     }
 
     // ===== Internal Balances =====
 
-    function _internalUpdate(address token, uint256 newBalance)
-        internal
-        isExec
-    {
+    function _internalUpdate(address token, uint256 newBalance) internal {
         _universalDebt[token] = newBalance;
         emit UpdatedUniversalDebt(_NONCE, token, newBalance);
     }
@@ -403,17 +433,33 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      * @return  Whether or not the mint succeeded.
      */
     function mintOptions(
-        bytes memory oid,
+        bytes32 oid,
         uint256 requestAmt,
         address[] memory receivers
     ) public isEndorsed(msg.sender) isExec returns (bool) {
+        console.log("house.mintOptions");
         // Execute the mint
         _core.dangerousMint(oid, requestAmt, receivers); // calls mintingInvariant()
 
+        console.log("dangerously minted");
         // Update internal base token balance
         (address baseToken, , , , ) = _core.getParameters(oid);
+        console.log("got parameters", baseToken);
         uint256 newBalance = _universalDebt[baseToken].add(requestAmt);
+        console.log("house.mintOptions._internalUpdate");
         _internalUpdate(baseToken, newBalance);
+        // update houseBalance
+        _houseBalance[oid][baseToken] = _houseBalance[oid][baseToken].add(
+            requestAmt
+        );
+
+        console.log("pull base tokens from caller");
+        // pull the base tokens
+        IERC20(baseToken).safeTransferFrom(
+            getExecutingCaller(),
+            address(this),
+            requestAmt
+        );
         return true;
     }
 
@@ -425,7 +471,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
      * @return  Whether or not the mint succeeded.
      */
     function borrowOptions(
-        bytes memory oid,
+        bytes32 oid,
         uint256 requestAmt,
         address[] memory receivers
     ) public isEndorsed(msg.sender) isExec returns (uint256) {
@@ -439,6 +485,118 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         // Reset delta by subtracting from actual amount borrowed
         acc.delta = actualAmt.sub(acc.delta);
         return actualAmt;
+    }
+
+    function exercise(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) public isEndorsed(msg.sender) isExec returns (bool) {
+        (
+            address baseToken,
+            address quoteToken,
+            uint256 strikePrice,
+            uint32 expiry,
+
+        ) = _core.getParameters(oid);
+        console.log("checking is not expired");
+        require(notExpired(expiry), "House: EXPIRED_OPTION");
+
+        console.log("subtracting base claim");
+        // Update claim for base tokens
+        _houseBalance[oid][baseToken] = _houseBalance[oid][baseToken].sub(
+            amount
+        );
+
+        console.log("pushing base tokens");
+        // Push base tokens
+        IERC20(baseToken).safeTransfer(receiver, amount);
+
+        console.log("_core.dangerousExercise");
+        // Burn long tokens
+        (uint256 lessBase, uint256 plusQuote) =
+            _core.dangerousExercise(oid, amount);
+
+        // Update claim for quote tokens
+        _houseBalance[oid][quoteToken] = _houseBalance[oid][quoteToken].add(
+            plusQuote
+        );
+        console.log("pulling quote tokens");
+        // Pulls quote tokens
+        Account storage acc = _accounts[getExecutingNonce()];
+        address pullFrom = fromInternal ? msg.sender : acc.depositor;
+        IERC20(quoteToken).safeTransferFrom(pullFrom, address(this), plusQuote);
+    }
+
+    function notExpired(uint32 expiry) public view returns (bool) {
+        console.log(expiry >= block.timestamp);
+        return expiry >= block.timestamp;
+    }
+
+    function redeem(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) public isEndorsed(msg.sender) isExec returns (bool) {
+        (, address quoteToken, uint256 strikePrice, uint32 expiry, ) =
+            _core.getParameters(oid);
+        (, address short) = _core.getTokenData(oid);
+        console.log("checking is not expired");
+        require(notExpired(expiry), "House: EXPIRED_OPTION");
+        // if not from internal, pull short options from caller to venue
+        if (!fromInternal) {
+            _takeTokensFromUser(short, amount);
+        }
+
+        uint256 quoteClaim = _houseBalance[oid][quoteToken];
+        uint256 minOutputQuote = amount.mul(strikePrice).div(1 ether);
+        console.log("calling core.dangerousredeem");
+        // Burn long tokens
+        uint256 lessQuote =
+            _core.dangerousRedeem(oid, amount, minOutputQuote, quoteClaim);
+
+        console.log("subtracting base claim");
+        // Update claim for quoteTokens
+        _houseBalance[oid][quoteToken] = quoteClaim.sub(lessQuote);
+
+        console.log("pushing quote tokens");
+        // Push base tokens
+        IERC20(quoteToken).safeTransfer(receiver, lessQuote);
+        return true;
+    }
+
+    function close(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) public isEndorsed(msg.sender) isExec returns (bool) {
+        (address baseToken, , , uint32 expiry, ) = _core.getParameters(oid);
+        (address long, address short) = _core.getTokenData(oid);
+        console.log("checking is not expired");
+        require(notExpired(expiry), "House: EXPIRED_OPTION");
+        // if not from internal, pull short options from caller to venue
+        if (!fromInternal) {
+            console.log("take long and short from user");
+            _takeTokensFromUser(short, amount);
+            _takeTokensFromUser(long, amount);
+        }
+        console.log("calling core.dangerousclose");
+        // Burn long tokens
+        uint256 lessBase = _core.dangerousClose(oid, amount);
+
+        console.log("subtracting base claim");
+        // Update claim for baseTokens
+        _houseBalance[oid][baseToken] = _houseBalance[oid][baseToken].sub(
+            lessBase
+        );
+
+        console.log("pushing base tokens");
+        // Push base tokens
+        IERC20(baseToken).safeTransfer(receiver, lessBase);
+        return true;
     }
 
     // ===== Execution =====
@@ -456,6 +614,7 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         address venue,
         bytes calldata params
     ) external payable nonReentrant returns (bool) {
+        // Get the Account to manipulate
         if (accountNonce == 0) {
             accountNonce = _accountNonce++;
             _accounts[accountNonce].depositor = msg.sender;
@@ -468,9 +627,11 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
         }
         _CALLER = msg.sender;
         _NONCE = accountNonce;
+        _VENUE = venue;
         _accelerator.executeCall(venue, params);
         _CALLER = _NO_ADDRESS;
         _NONCE = _NO_NONCE;
+        _VENUE = _NO_ADDRESS;
         emit Executed(msg.sender, venue);
         return true;
     }
@@ -519,5 +680,27 @@ contract House is Manager, Ownable, Accelerator, ReentrancyGuard {
 
     function getAccelerator() public view returns (address) {
         return address(_accelerator);
+    }
+
+    function getOptionTokens(bytes32 oid)
+        public
+        view
+        returns (address, address)
+    {
+        return _core.getTokenData(oid);
+    }
+
+    function getParameters(bytes32 oid)
+        public
+        view
+        returns (
+            address,
+            address,
+            uint256,
+            uint32,
+            uint8
+        )
+    {
+        return _core.getParameters(oid);
     }
 }

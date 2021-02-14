@@ -5,31 +5,36 @@ interface IRegistry {
         address baseToken,
         address quoteToken,
         uint256 strikePrice,
-        uint8 expiry,
+        uint32 expiry,
         bool isCall
     )
         external
         returns (
-            bytes calldata,
+            bytes32,
             address,
             address
         );
 
-    function getTokenData(bytes calldata id)
-        external
-        view
-        returns (address, address);
+    function getTokenData(bytes32 oid) external view returns (address, address);
 
-    function getParameters(bytes calldata id)
+    function getParameters(bytes32 oid)
         external
         view
         returns (
             address,
             address,
             uint256,
-            uint8,
+            uint32,
             uint8
         );
+
+    function getOIdFromParameters(
+        address baseToken,
+        address quoteToken,
+        uint256 strikePrice,
+        uint32 expiry,
+        bool isCall
+    ) external view returns (bytes32);
 
     // ===== Pure =====
     function generateType(bool isCall)

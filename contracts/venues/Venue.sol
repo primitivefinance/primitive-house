@@ -1,4 +1,4 @@
-pragma solidity >=0.6.2;
+pragma solidity ^0.7.1;
 
 /**
  * @title The Base Venue contract to facilitate interactions with the House.
@@ -10,23 +10,31 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {IERC20} from "../interfaces/IERC20.sol";
 import {IHouse} from "../interfaces/IHouse.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
-import {
-    IOption
-} from "@primitivefi/contracts/contracts/option/interfaces/IOption.sol";
+import {IWToken} from "../interfaces/IWToken.sol";
+import {pERC1155Receiver} from "../utils/pERC1155Receiver.sol";
 
 import "hardhat/console.sol";
 
-contract Venue {
+contract Venue is pERC1155Receiver {
     using SafeERC20 for IERC20;
 
-    IWETH public weth;
-    IHouse public house;
+    IWETH public immutable weth;
+    IHouse public immutable house;
+    IWToken public immutable wToken;
 
     mapping(address => mapping(address => bool)) public isMaxApproved;
 
-    constructor(address weth_, address house_) public {
+    constructor(
+        address weth_,
+        address house_,
+        address wToken_
+    ) {
         weth = IWETH(weth_);
         house = IHouse(house_);
+        wToken = IWToken(wToken_);
+        // Approve wrap token
+        IWToken(wToken_).setApprovalForAll(house_, true);
+        // Approve house and weth
         checkApproved(weth_, house_);
     }
 
@@ -34,7 +42,7 @@ contract Venue {
         assert(msg.sender == address(weth)); // only accept ETH via fallback from the WETH contract
     }
 
-    // ==== Utility ====
+    // ===== Utility =====
 
     function checkApproved(address token, address spender) public {
         if (isMaxApproved[token][spender]) {
@@ -45,22 +53,126 @@ contract Venue {
         }
     }
 
-    // ==== Actions ====
-
-    function _convertETH() internal {
+    function _wethDeposit() internal {
         if (msg.value > 0) {
-            weth.deposit.value(msg.value)();
+            weth.deposit{value: msg.value}();
         }
     }
 
-    function _takeWETHDust() internal {
-        uint256 bal = IERC20(address(weth)).balanceOf(address(this));
-        if (bal > 0) {
-            weth.withdraw(bal);
-            (bool success, ) = house.CALLER().call{value: bal}(new bytes(0));
+    function _wethWithdraw() internal {
+        uint256 balance = IERC20(address(weth)).balanceOf(address(this));
+        if (balance > 0) {
+            weth.withdraw(balance);
+            (bool success, ) =
+                house.getExecutingCaller().call{value: balance}(new bytes(0));
             require(success, "Venue: SEND_ETH_BACK");
         }
     }
+
+    // ===== Tokens =====
+    function _requestTokens(address token, uint256 quantity) internal {
+        if (quantity > 0) {
+            house.takeTokensFromUser(token, quantity);
+        }
+    }
+
+    function _tokenWithdraw(address token) internal {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        if (balance > 0) {
+            IERC20(token).transfer(house.getExecutingCaller(), balance);
+        }
+    }
+
+    // ===== Wrapped Tokens =====
+
+    /**
+     * @notice  Sends `amount` of `token` to a wrapped token, then mints the wrapped token.
+     */
+    function _wrapTokenForHouse(address token, uint256 amount) internal {
+        if (amount > 0) {
+            checkApproved(token, address(wToken));
+            wToken.mint(token, amount);
+            console.log("wrapped token minted");
+            house.addCollateral(address(wToken), uint256(token), amount);
+        }
+    }
+
+    /**
+     * @notice  Pulls `amount` of the wrapped token for `token` from the house, then burns the wrapped token.
+     */
+    function _tokenUnwrapFromHouse(address token, uint256 amount) internal {
+        if (amount > 0) {
+            house.removeCollateral(address(wToken), uint256(token), amount);
+            wToken.burn(token, amount);
+        }
+    }
+
+    // ===== Options =====
+
+    function _wrapOptionForHouse(bytes32 oid, uint256 amount) internal {
+        if (amount > 0) {
+            (address long, address short) = house.getOptionTokens(oid);
+            checkApproved(long, address(wToken));
+            checkApproved(short, address(wToken));
+            wToken.mintOption(oid, long, short, amount);
+            console.log("wrapped option token minted");
+            house.addCollateral(address(wToken), uint256(oid), amount);
+        }
+    }
+
+    function _optionUnwrapFromHouse(bytes32 oid, uint256 amount) internal {
+        if (amount > 0) {
+            (address long, address short) = house.getOptionTokens(oid);
+            console.log("removing collateral");
+            // Takes out the option collateral token
+            house.removeCollateral(address(wToken), uint256(oid), amount);
+            console.log("wrapped option token minted");
+            wToken.burnOption(oid, long, short, amount);
+        }
+    }
+
+    function _exerciseOptions(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) internal {
+        if (amount > 0) {
+            (address long, ) = house.getOptionTokens(oid);
+            if (fromInternal) {
+                (, address quoteToken, , , ) = house.getParameters(oid);
+                // Check the house can pull quote tokens from this contract
+                checkApproved(quoteToken, address(house));
+            }
+            house.exercise(oid, amount, receiver, fromInternal);
+        }
+    }
+
+    function _redeemOptions(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) internal {
+        if (amount > 0) {
+            (address long, address short) = house.getOptionTokens(oid);
+            house.redeem(oid, amount, receiver, fromInternal);
+        }
+    }
+
+    function _closeOptions(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) internal {
+        if (amount > 0) {
+            (address long, address short) = house.getOptionTokens(oid);
+            house.close(oid, amount, receiver, fromInternal);
+        }
+    }
+
+    // ===== Actions =====
 
     function _mintOptions(
         address optionAddress,
@@ -68,90 +180,8 @@ contract Venue {
         address longReceiver,
         address shortReceiver
     ) internal {
-        if (quantity > 0) {
-            house.mintVirtualOptions(
-                optionAddress,
-                quantity,
-                longReceiver,
-                shortReceiver
-            );
-        }
+        if (quantity > 0) {}
     }
 
-    function _burnOptions(
-        address optionAddress,
-        uint256 quantity,
-        address receiver
-    ) internal {
-        if (quantity > 0) {
-            house.burnVirtualOptions(optionAddress, quantity, receiver);
-        }
-    }
-
-    function _lendSingle(address token, uint256 amount) internal {
-        address[] memory tokens = new address[](1);
-        tokens[0] = token;
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-        _lendMultiple(tokens, amounts);
-    }
-
-    function _lendMultiple(address[] memory tokens, uint256[] memory amounts)
-        internal
-    {
-        house.addTokens(house.CALLER(), tokens, amounts);
-    }
-
-    function _borrowSingle(address token, uint256 amount) internal {
-        address[] memory tokens = new address[](1);
-        tokens[0] = token;
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-        _borrowMultiple(tokens, amounts);
-    }
-
-    function _borrowMultiple(address[] memory tokens, uint256[] memory amounts)
-        internal
-    {
-        house.removeTokens(house.CALLER(), tokens, amounts);
-    }
-
-    function _borrowCollateral(
-        address[] memory tokens,
-        uint256[] memory amounts
-    ) internal {
-        house.removeTokens(address(this), tokens, amounts);
-    }
-
-    // Pulls tokens from user and sends them to the house.
-    function _takeTokens(address token, uint256 quantity) internal {
-        if (quantity > 0) {
-            house.takeTokensFromUser(token, quantity);
-        }
-    }
-
-    function _takeDust(address token) internal {
-        uint256 bal = IERC20(token).balanceOf(address(this));
-        if (bal > 0) {
-            IERC20(token).transfer(house.CALLER(), bal);
-        }
-    }
-
-    // ==== View ====
-
-    function getVirtualAssets(address optionAddress)
-        public
-        view
-        returns (
-            address,
-            address,
-            address,
-            address
-        )
-    {
-        IOption virtualOption = IOption(house.virtualOptions(optionAddress));
-        (address under, address strike, address short) =
-            virtualOption.getAssetAddresses();
-        return (address(virtualOption), under, strike, short);
-    }
+    // ===== View =====
 }

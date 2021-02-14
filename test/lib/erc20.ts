@@ -3,6 +3,7 @@ import { deploy } from '../../scripts/deploy'
 import { Contract, BigNumber, Signer } from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address'
 import WethArtifact from '@primitivefi/contracts/artifacts/WETH9.json'
+import pERC20 from '../../build/contracts/PrimitiveERC20.sol/PrimitiveERC20.json'
 const { MaxUint256 } = ethers.constants
 const { deployContract } = waffle
 
@@ -13,16 +14,22 @@ export const deployWeth = async (signer: Signer) => {
   return weth
 }
 
-export const deployTokens = async (signer: Signer, quantity: number, totalSupply?: BigNumber) => {
+export const deployTokens = async (signer: Signer, quantity: number, names?: string[], totalSupply?: BigNumber) => {
   const amount = ethers.utils.parseEther('1000000000')
   let tokens: Contract[] = []
 
   for (let i = 0; i < quantity; i++) {
-    let token = await deploy('TestERC20', { from: signer, args: [totalSupply ? totalSupply : amount] })
+    let name = names ? names[i] : 'TestERC20'
+    let token = await deploy('TestERC20', { from: signer, args: [totalSupply ? totalSupply : amount, name] })
     tokens.push(token)
   }
 
   return tokens
+}
+
+export const tokenFromAddress = (address: string, signer: Signer) => {
+  let token = new ethers.Contract(address, pERC20.abi, signer)
+  return token
 }
 
 export const batchApproval = async (

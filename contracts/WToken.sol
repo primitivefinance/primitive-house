@@ -16,7 +16,7 @@ import {
 } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IWToken} from "./interfaces/IWToken.sol";
 
-contract WToken is ERC1155("WToken"), ReentrancyGuard, IWToken {
+contract wToken is ERC1155("wToken"), ReentrancyGuard, IWToken {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -44,6 +44,41 @@ contract WToken is ERC1155("WToken"), ReentrancyGuard, IWToken {
         uint256 id = uint256(token);
         _burn(msg.sender, id, amount);
         IERC20(token).safeTransfer(msg.sender, amount);
+    }
+
+    /**
+     * @notice  Transfers both long and short option ERC20s from `oid` to a wrapped token with wid = oid.
+     */
+    function mintOption(
+        bytes32 oid,
+        address long,
+        address short,
+        uint256 amount
+    ) external override nonReentrant {
+        // store current balance to check against the balance after tokens have been pulled.
+        uint256 prevBal = IERC20(long).balanceOf(address(this));
+        IERC20(long).safeTransferFrom(msg.sender, address(this), amount);
+        uint256 postBal = IERC20(long).balanceOf(address(this));
+        uint256 balanceDiff = postBal.sub(prevBal);
+
+        uint256 prevBalShort = IERC20(short).balanceOf(address(this));
+        IERC20(short).safeTransferFrom(msg.sender, address(this), amount);
+        uint256 postBalShort = IERC20(short).balanceOf(address(this));
+        uint256 balanceDiffShort = postBalShort.sub(prevBalShort);
+        require(balanceDiff == balanceDiffShort, "wToken: MISMATCH_AMTS");
+        _mint(msg.sender, uint256(oid), balanceDiff, "");
+    }
+
+    function burnOption(
+        bytes32 oid,
+        address long,
+        address short,
+        uint256 amount
+    ) external override nonReentrant {
+        // Burns the wrapped tokens from `msg.sender`, then sends long and short to `msg.sender`.
+        _burn(msg.sender, uint256(oid), amount);
+        IERC20(long).safeTransfer(msg.sender, amount);
+        IERC20(short).safeTransfer(msg.sender, amount);
     }
 
     // ===== ERC20 Conversion =====

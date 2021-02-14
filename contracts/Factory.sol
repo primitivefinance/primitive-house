@@ -21,6 +21,8 @@ contract Factory is IFactory {
     bytes32 private constant _OPTION_SALT =
         0x56f3a99c8e36689645460020839ea1340cbbb2e507b7effe3f180a89db85dd87; // keccak("primitive-option")
 
+    uint256 public nonce;
+
     constructor() {
         bytes memory creationCode = type(PrimitiveERC20).creationCode;
         address template = Create2.deploy(0, _OPTION_SALT, creationCode);
@@ -36,11 +38,14 @@ contract Factory is IFactory {
         override
         returns (address)
     {
+        nonce = nonce.add(1);
         // Calculates the salt for create2.
         bytes32 salt =
             keccak256(
                 abi.encodePacked(
-                    _OPTION_SALT
+                    _OPTION_SALT,
+                    nonce,
+                    symbol
                     // additional params
                 )
             );

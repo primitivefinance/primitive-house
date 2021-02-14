@@ -6,7 +6,8 @@ const formatTableData = async (
   contractNamesArray: string[],
   contractsArray: Contract[],
   tokensArray: Contract[],
-  addressArray: string[]
+  addressArray: string[],
+  addressNamesArray: string[]
 ) => {
   const info = {
     balances: [
@@ -27,7 +28,7 @@ const formatTableData = async (
       let token = tokensArray[x]
       let balance = await token.balanceOf(contract.address)
       let formattedBalance = formatEther(balance)
-      let tokenName = await token.name()
+      let tokenName = await token.symbol()
       let totalSupply = formatEther(await token.totalSupply())
 
       let data = {
@@ -42,15 +43,16 @@ const formatTableData = async (
 
   // for each address, get each token balance
   for (let i = 0; i < addressArray.length; i++) {
+    let addressName = addressNamesArray[i]
     let address = addressArray[i]
     for (let x = 0; x < tokensArray.length; x++) {
       let token = tokensArray[x]
       let balance = await token.balanceOf(address)
       let formattedBalance = formatEther(balance)
-      let tokenName = await token.name()
+      let tokenName = await token.symbol()
       let totalSupply = formatEther(await token.totalSupply())
       let data = {
-        contract: address,
+        contract: addressName,
         tokenName: tokenName,
         tokenBalance: formattedBalance,
         totalSupply: totalSupply,

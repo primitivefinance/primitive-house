@@ -30,15 +30,15 @@ contract Registry is IRegistry, Factory {
         address baseToken;
         address quoteToken;
         uint256 strikePrice;
-        uint8 expiry;
+        uint32 expiry;
         uint8 optionType;
     }
 
-    event DeployedOptionClone(address indexed from, bytes indexed id);
+    event DeployedOptionClone(address indexed from, bytes32 indexed oid);
 
-    mapping(bytes => TokenData) internal _tokenData;
-    mapping(bytes => Parameters) internal _parameters;
-    bytes[] public allOptionIds;
+    mapping(bytes32 => TokenData) internal _tokenData;
+    mapping(bytes32 => Parameters) internal _parameters;
+    bytes32[] public allOptionIds;
 
     constructor() {}
 
@@ -48,13 +48,13 @@ contract Registry is IRegistry, Factory {
         address baseToken,
         address quoteToken,
         uint256 strikePrice,
-        uint8 expiry,
+        uint32 expiry,
         bool isCall
     )
         public
         override
         returns (
-            bytes memory,
+            bytes32,
             address,
             address
         )
@@ -62,14 +62,7 @@ contract Registry is IRegistry, Factory {
         // Symbol = 'long/short' + 'call/put' + baseTokenSymbol
         (uint8 optionType, string memory optionStringType) =
             generateType(isCall);
-        string memory shortOptionSymbol =
-            string(
-                abi.encodePacked(
-                    "s",
-                    optionStringType,
-                    IPrimitiveERC20(baseToken).symbol()
-                )
-            );
+
         // Deploy erc-20 clones
         address longToken =
             deployClone(
@@ -81,15 +74,27 @@ contract Registry is IRegistry, Factory {
                     )
                 )
             );
-        address shortToken = deployClone(NAME, shortOptionSymbol);
+        address shortToken =
+            deployClone(
+                NAME,
+                string(
+                    abi.encodePacked(
+                        "s",
+                        optionStringType,
+                        IPrimitiveERC20(baseToken).symbol()
+                    )
+                )
+            );
         // Option ID
-        bytes memory oid =
-            abi.encodePacked(
-                baseToken,
-                quoteToken,
-                strikePrice,
-                expiry,
-                optionType
+        bytes32 oid =
+            keccak256(
+                abi.encodePacked(
+                    baseToken,
+                    quoteToken,
+                    strikePrice,
+                    expiry,
+                    optionType
+                )
             );
         // Option data storage
         TokenData storage optionData = _tokenData[oid];
@@ -109,17 +114,38 @@ contract Registry is IRegistry, Factory {
     }
 
     // ===== View =====
-    function getTokenData(bytes memory id)
+    function getTokenData(bytes32 oid)
         public
         view
         override
         returns (address, address)
     {
-        TokenData memory data = _tokenData[id];
+        TokenData memory data = _tokenData[oid];
         return (data.longToken, data.shortToken);
     }
 
-    function getParameters(bytes memory id)
+    function getOIdFromParameters(
+        address baseToken,
+        address quoteToken,
+        uint256 strikePrice,
+        uint32 expiry,
+        bool isCall
+    ) public pure override returns (bytes32) {
+        (uint8 optionType, ) = generateType(isCall);
+        bytes32 oid =
+            keccak256(
+                abi.encodePacked(
+                    baseToken,
+                    quoteToken,
+                    strikePrice,
+                    expiry,
+                    optionType
+                )
+            );
+        return oid;
+    }
+
+    function getParameters(bytes32 oid)
         public
         view
         override
@@ -127,11 +153,11 @@ contract Registry is IRegistry, Factory {
             address,
             address,
             uint256,
-            uint8,
+            uint32,
             uint8
         )
     {
-        Parameters memory params = _parameters[id];
+        Parameters memory params = _parameters[oid];
         return (
             params.baseToken,
             params.quoteToken,

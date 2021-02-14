@@ -17,6 +17,8 @@ import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 import {IManager} from "./interfaces/IManager.sol";
 import {ICore} from "./interfaces/ICore.sol";
 
+import "hardhat/console.sol";
+
 contract Core is ICore, Registry {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
@@ -48,27 +50,109 @@ contract Core is ICore, Registry {
      * @dev Mint the `oid` long + short option tokens to `receivers` using the mintingInvariant function.
      */
     function dangerousMint(
-        bytes memory oid,
+        bytes32 oid,
         uint256 amount,
         address[] memory receivers
     ) public override onlyManager returns (uint256) {
+        console.log("minting internally");
         _internalMint(oid, amount, receivers);
         return amount;
     }
 
     function _internalMint(
-        bytes memory oid,
+        bytes32 oid,
         uint256 amount,
         address[] memory receivers
     ) internal {
         TokenData memory data = _tokenData[oid];
         IPrimitiveERC20(data.longToken).mint(receivers[0], amount);
         IPrimitiveERC20(data.shortToken).mint(receivers[1], amount);
+        console.log("minted tokens");
+    }
+
+    function dangerousExercise(bytes32 oid, uint256 amount)
+        public
+        override
+        onlyManager
+        returns (uint256, uint256)
+    {
+        (
+            address baseToken,
+            address quoteToken,
+            uint256 strikePrice,
+            uint32 expiry,
+
+        ) = getParameters(oid);
+
+        // burn the long options
+        TokenData memory data = _tokenData[oid];
+        IPrimitiveERC20(data.longToken).burn(
+            IManager(msg.sender).getExecutingVenue(),
+            amount
+        );
+
+        // return necessary amounts
+        uint256 lessBase = amount;
+        uint256 plusQuote = amount.mul(strikePrice).div(1 ether);
+        return (lessBase, plusQuote);
+    }
+
+    function dangerousRedeem(
+        bytes32 oid,
+        uint256 inputShort,
+        uint256 minOutputQuote,
+        uint256 quoteBalance
+    ) public override onlyManager returns (uint256) {
+        // burn the long options
+        TokenData memory data = _tokenData[oid];
+        address short = data.shortToken;
+        uint256 shortSupply = IERC20(short).totalSupply();
+
+        if (minOutputQuote > 0) {
+            console.log("checking redeem amt");
+            console.log(minOutputQuote, shortSupply, inputShort, quoteBalance);
+            require(
+                minOutputQuote.mul(shortSupply) == inputShort.mul(quoteBalance),
+                "Core: QUOTE_BALANCE"
+            );
+            IPrimitiveERC20(short).burn(
+                IManager(msg.sender).getExecutingVenue(),
+                inputShort
+            );
+        }
+
+        // return necessary inputShorts
+        console.log(inputShort, shortSupply, quoteBalance);
+        uint256 lessQuote = inputShort.mul(quoteBalance).div(shortSupply);
+        return lessQuote;
+    }
+
+    function dangerousClose(bytes32 oid, uint256 amount)
+        public
+        override
+        onlyManager
+        returns (uint256)
+    {
+        // burn the long options
+        TokenData memory data = _tokenData[oid];
+        IPrimitiveERC20(data.longToken).burn(
+            IManager(msg.sender).getExecutingVenue(),
+            amount
+        );
+        // burn the short options
+        IPrimitiveERC20(data.shortToken).burn(
+            IManager(msg.sender).getExecutingVenue(),
+            amount
+        );
+
+        // return necessary amounts
+        uint256 lessBase = amount;
+        return lessBase;
     }
 
     // ===== View =====
 
-    function getOptionBalances(bytes memory oid, address account)
+    function getOptionBalances(bytes32 oid, address account)
         public
         view
         override
