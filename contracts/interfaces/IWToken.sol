@@ -7,6 +7,21 @@ interface IWToken is IERC1155 {
 
     function burn(address token, uint256 amount) external;
 
+    // ===== Options =====
+    function mintOption(
+        bytes32 oid,
+        address long,
+        address short,
+        uint256 amount
+    ) external;
+
+    function burnOption(
+        bytes32 oid,
+        address long,
+        address short,
+        uint256 amount
+    ) external;
+
     function balanceOfERC20(address token, address user)
         external
         view
