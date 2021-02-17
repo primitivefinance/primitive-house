@@ -18,8 +18,8 @@ contract Registry is IRegistry, Factory {
     using SafeMath for uint256;
 
     string public constant NAME = "Primitive Option";
-    uint8 public constant CALL = uint8(1);
-    uint8 public constant PUT = uint8(2);
+    uint8 public constant override CALL = uint8(1);
+    uint8 public constant override PUT = uint8(2);
 
     struct TokenData {
         address longToken;
@@ -38,6 +38,7 @@ contract Registry is IRegistry, Factory {
 
     mapping(bytes32 => TokenData) internal _tokenData;
     mapping(bytes32 => Parameters) internal _parameters;
+    mapping(address => bytes32) internal _reverseLookup;
     bytes32[] public allOptionIds;
 
     constructor() {}
@@ -109,11 +110,23 @@ contract Registry is IRegistry, Factory {
         optionParameters.optionType = optionType;
 
         allOptionIds.push(oid);
+        _reverseLookup[longToken] = oid;
+        _reverseLookup[shortToken] = oid;
         emit DeployedOptionClone(msg.sender, oid);
         return (oid, longToken, shortToken);
     }
 
     // ===== View =====
+
+    function getOptionIdFromAddress(address option)
+        public
+        view
+        override
+        returns (bytes32)
+    {
+        return _reverseLookup[option];
+    }
+
     function getTokenData(bytes32 oid)
         public
         view

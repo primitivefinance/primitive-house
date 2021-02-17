@@ -8,22 +8,15 @@ pragma solidity ^0.7.1;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-// Primitive
-import {PrimitiveERC20} from "../PrimitiveERC20.sol";
-
 // Internal
-import {Venue} from "./Venue.sol";
-import {IHouse} from "../interfaces/IHouse.sol";
-import {IWETH} from "../interfaces/IWETH.sol";
+import {VaultVenue} from "./VaultVenue.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 
 import "hardhat/console.sol";
 
-contract BasicVenue is Venue, PrimitiveERC20 {
+contract BasicVenue is VaultVenue {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
-
-    event Initialized(address indexed from); // Emmitted on deployment
 
     // ===== Constructor =====
 
@@ -31,96 +24,12 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         address weth_,
         address house_,
         address wToken_
-    ) public Venue(weth_, house_, wToken_) {
-        initialize("Primitive Basic Vault Token", "pBasic");
-        emit Initialized(msg.sender);
-    }
+    ) VaultVenue(weth_, house_, wToken_) {}
 
     // ===== Mutable =====
 
-    mapping(address => mapping(address => uint256)) public balanceOfUser;
-    event Deposit(address indexed token, uint256 amount, address receiver);
-    event Withdraw(address indexed token, uint256 amount, address receiver);
-
     /**
-     * @notice A basic function to deposit an option into this contract's internal balance.
-     */
-    function deposit(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public returns (bool) {
-        // Receivers are this address
-        address[] memory receivers = new address[](2);
-        receivers[0] = address(this);
-        receivers[1] = address(this);
-
-        console.log("minting options");
-        // Call the house to mint options
-        house.mintOptions(oid, amount, receivers);
-        // Get option addresses
-        (address long, address short) = house.getOptionTokens(oid);
-        console.log("updating balances");
-        // Update long balance
-        _depositToken(receiver, long, amount);
-        // Update short balance
-        _depositToken(receiver, long, amount);
-        return true;
-    }
-
-    function withdraw(
-        bytes32 oid,
-        uint256 amount,
-        address[] memory receivers
-    ) public returns (bool) {
-        // Get option addresses
-        (address long, address short) = house.getOptionTokens(oid);
-        console.log("updating balances");
-        address primary = receivers[0];
-        address secondary = receivers[1];
-        // Update long balance
-        _withdrawToken(primary, long, amount);
-        // Update short balance
-        _withdrawToken(secondary, long, amount);
-        // pushing tokens
-        IERC20(long).safeTransfer(primary, amount);
-        IERC20(short).safeTransfer(secondary, amount);
-        return true;
-    }
-
-    function _withdrawToken(
-        address account,
-        address token,
-        uint256 amount
-    ) internal {
-        // Update short balance
-        _updateBalance(
-            account,
-            token,
-            balanceOfUser[account][token].sub(amount)
-        );
-        // Emit a deposit event for each token
-        emit Withdraw(token, amount, account);
-        console.log("withdrawn");
-    }
-
-    function depositToken(
-        address token,
-        uint256 amount,
-        address receiver
-    ) public returns (bool) {
-        // Receivers are this address
-        address[] memory receivers = new address[](2);
-        receivers[0] = address(this);
-        receivers[1] = address(this);
-        // Update long balance
-        _depositToken(receiver, token, amount);
-        _requestTokens(token, amount);
-        return true;
-    }
-
-    /**
-     * @notice A basic function to deposit an option into a wrap token, and return it to the house.
+     * @notice A basic function to deposit an option into a wrap token, and return it to the _house.
      */
     function mintOptionsThenWrap(
         bytes32 oid,
@@ -133,31 +42,13 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         receivers[1] = address(this);
 
         console.log("minting options");
-        // Call the house to mint options, pulls base tokens to the house from the executing caller
-        house.mintOptions(oid, amount, receivers);
+        // Call the _house to mint options, pulls base tokens to the _house from the executing caller
+        _mintOptions(oid, amount, receivers, false);
         // Get option addresses
-        (address long, address short) = house.getOptionTokens(oid);
-        // Send option tokens to a wrapped token, which is then sent back to the house.
+        (address long, address short) = _house.getOptionTokens(oid);
+        // Send option tokens to a wrapped token, which is then sent back to the _house.
         _wrapOptionForHouse(oid, amount);
         return true;
-    }
-
-    /**
-     * @notice  Takes a wrapped option from the house, and splits it to amounts which are sent to receivers.
-     */
-    function splitOptionsAndDeposit(
-        bytes32 oid,
-        uint256 amount,
-        address[] memory receivers
-    ) public {
-        console.log("unwrapping options");
-        // Unwrap the collateral from the House
-        _optionUnwrapFromHouse(oid, amount);
-        console.log("depositing to this contract");
-        // Deposit the option ERC20s to this contract
-        (address long, address short) = house.getOptionTokens(oid);
-        _depositToken(receivers[0], long, amount);
-        _depositToken(receivers[1], short, amount);
     }
 
     /**
@@ -168,8 +59,8 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         uint256 amount,
         address receiver
     ) public {
-        (address long, ) = house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[house.getExecutingCaller()][long];
+        (address long, ) = _house.getOptionTokens(oid);
+        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
         console.log("checking balance in venue", balance, amount);
         require(balance >= amount, "Venue: ABOVE_MAX");
         // exercise options using the House
@@ -187,8 +78,8 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         receivers[0] = address(this);
         receivers[1] = address(this);
         splitOptionsAndDeposit(oid, amount, receivers);
-        (address long, ) = house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[house.getExecutingCaller()][long];
+        (address long, ) = _house.getOptionTokens(oid);
+        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
         console.log("checking balance in venue", balance, amount);
         require(balance >= amount, "Venue: ABOVE_MAX");
         // exercise options using the House
@@ -201,8 +92,8 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         uint256 amount,
         address receiver
     ) public {
-        (, address short) = house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[house.getExecutingCaller()][short];
+        (, address short) = _house.getOptionTokens(oid);
+        uint256 balance = balanceOfUser[_house.getExecutingCaller()][short];
         console.log("checking balance in venue", balance, amount);
         require(balance >= amount, "Venue: ABOVE_MAX");
         // exercise options using the House
@@ -221,8 +112,8 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         receivers[1] = address(this);
         splitOptionsAndDeposit(oid, amount, receivers);
 
-        (address long, ) = house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[house.getExecutingCaller()][long];
+        (address long, ) = _house.getOptionTokens(oid);
+        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
         console.log("checking balance in venue", balance, amount);
         require(balance >= amount, "Venue: ABOVE_MAX");
         // exercise options using the House
@@ -241,8 +132,8 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         receivers[1] = address(this);
         splitOptionsAndDeposit(oid, amount, receivers);
 
-        (address long, ) = house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[house.getExecutingCaller()][long];
+        (address long, ) = _house.getOptionTokens(oid);
+        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
         console.log("checking balance in venue", balance, amount);
         require(balance >= amount, "Venue: ABOVE_MAX");
         // exercise options using the House
@@ -255,8 +146,8 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         uint256 amount,
         address receiver
     ) public {
-        (address long, ) = house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[house.getExecutingCaller()][long];
+        (address long, ) = _house.getOptionTokens(oid);
+        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
         console.log("checking balance in venue", balance, amount);
         require(balance >= amount, "Venue: ABOVE_MAX");
         // exercise options using the House
@@ -269,37 +160,13 @@ contract BasicVenue is Venue, PrimitiveERC20 {
         uint256 amount,
         address receiver
     ) public {
-        (address long, ) = house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[house.getExecutingCaller()][long];
+        (address long, ) = _house.getOptionTokens(oid);
+        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
         console.log("checking balance in venue", balance, amount);
         require(balance >= amount, "Venue: ABOVE_MAX");
         // exercise options using the House
         console.log("venue._closeOptions");
         _closeOptions(oid, amount, receiver, false);
-    }
-
-    function _depositToken(
-        address account,
-        address token,
-        uint256 amount
-    ) internal {
-        // Update short balance
-        _updateBalance(
-            account,
-            token,
-            balanceOfUser[account][token].add(amount)
-        );
-        // Emit a deposit event for each token
-        emit Deposit(token, amount, account);
-        console.log("deposited");
-    }
-
-    function _updateBalance(
-        address account,
-        address token,
-        uint256 amount
-    ) internal {
-        balanceOfUser[account][token] = amount;
     }
 
     // ===== Test =====

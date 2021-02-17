@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.2;
+pragma solidity ^0.7.1;
+pragma experimental ABIEncoderV2;
 
 /**
  * @title   The Primitive House -> Manages collateral, leverages liquidity.
@@ -25,17 +26,11 @@ import {IHouse} from "./interfaces/IHouse.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {Manager} from "./Manager.sol";
-import {pERC1155Receiver} from "./utils/pERC1155Receiver.sol";
+import {BasicERC1155Receiver} from "./utils/BasicERC1155Receiver.sol";
 
 import "hardhat/console.sol";
 
-contract House is
-    Manager,
-    Ownable,
-    Accelerator,
-    ReentrancyGuard,
-    pERC1155Receiver
-{
+contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -53,46 +48,6 @@ contract House is
      * @notice Event emitted after a successful `execute` call on the House.
      */
     event Executed(address indexed from, address indexed venue);
-
-    /**
-     * @notice Event emitted after a `dangerousMint` has succeeded.
-     */
-    event OptionsMinted(
-        address indexed from,
-        uint256 amount,
-        address indexed longReceiver,
-        address indexed shortReceiver
-    );
-
-    /**
-     * @notice Event emitted after a `dangerousBurn` has succeeded.
-     */
-    event OptionsBurned(
-        address indexed from,
-        uint256 longAmount,
-        uint256 shortAmount,
-        address indexed longReceiver,
-        address indexed shortReceiver
-    );
-
-    /**
-     * @notice Event emitted after a `_universalDebt` balance has been updated.
-     */
-    event UpdatedUniversalDebt(
-        uint256 indexed accountNonce,
-        address indexed token,
-        uint256 newBalance
-    );
-
-    /**
-     * @notice Event emitted after a `_strikeClaim` balance has been updated.
-     */
-    event UpdatedQuoteClaim(
-        uint256 indexed accountNonce,
-        address indexed shortOption,
-        address indexed token,
-        uint256 newBalance
-    );
 
     /**
      * @notice Event emitted when `token` is deposited to the House.
@@ -130,12 +85,8 @@ contract House is
         uint256 balance;
         uint256 debt;
         uint256 delta;
+        uint256[] oids;
     }
-
-    /**
-     * @dev The contract with core option logic.
-     */
-    ICore internal _core;
 
     /**
      * @dev The contract to execute transactions on behalf of the House.
@@ -150,17 +101,17 @@ contract House is
     /**
      * @dev If _EXECUTING, the account with nonce is being manipulated
      */
-    uint256 private _NONCE;
-
-    /**
-     * @dev If _EXECUTING, the `msg.sender` of `execute`.
-     */
-    address private _CALLER;
+    uint256 private _NONCE = _NO_NONCE;
 
     /**
      * @dev If _EXECUTING, the venue being used to manipulate the account.
      */
-    address private _VENUE;
+    address private _VENUE = _NO_ADDRESS;
+
+    /**
+     * @dev If _EXECUTING, the Account.depositor by default, _VENUE if set.
+     */
+    address private _EXECUTING_SENDER = _NO_ADDRESS;
 
     /**
      * @dev The current nonce that will be set when a new account is initialized.
@@ -173,32 +124,20 @@ contract House is
     mapping(uint256 => Account) private _accounts;
 
     /**
-     * @dev The universal debt balance for each real token.
-     *      _universalDebt[token] = amount.
-     */
-    mapping(address => uint256) internal _universalDebt;
-
-    /**
-     * @dev The amount of quote tokens that are claimable by short option tokens.
-     */
-    mapping(address => mapping(address => uint256)) internal _quoteClaim;
-
-    /**
      * @dev The options -> token -> amount claim.
      */
     mapping(bytes32 => mapping(address => uint256)) internal _houseBalance;
 
-    modifier isEndorsed(address venue_) {
-        //require(_capitol.getIsEndorsed(venue_), "House: NOT_ENDORSED");
-        _;
-    }
+    /**
+     * @dev The token -> amount collateral locked amount.
+     */
+    mapping(address => uint256) internal _collateralBalance;
 
     /**
      * @notice  A mutex to use during an `execute` call.
      */
     modifier isExec() {
         require(_NONCE != _NO_NONCE, "House: NO_NONCE");
-        require(_CALLER != _NO_ADDRESS, "House: NO_ADDRESS");
         require(_VENUE == msg.sender, "House: NO_VENUE");
         require(!_EXECUTING, "House: IN_EXECUTION");
         _EXECUTING = true;
@@ -206,13 +145,8 @@ contract House is
         _EXECUTING = false;
     }
 
-    constructor(address optionCore_) {
+    constructor(address core_) Manager(core_) {
         _accelerator = new Accelerator();
-        _core = ICore(optionCore_);
-    }
-
-    function setCore(address core_) public onlyOwner {
-        _core = ICore(core_);
     }
 
     // ====== Transfers ======
@@ -236,51 +170,11 @@ contract House is
         returns (bool)
     {
         IERC20(token).safeTransferFrom(
-            _accounts[getExecutingNonce()].depositor,
-            msg.sender,
+            _accounts[getExecutingNonce()].depositor, // Account owner
+            msg.sender, // The venue
             amount
         );
         return true;
-    }
-
-    /**
-     * @notice  Transfer ERC1155 tokens from `msg.sender` to this contract.
-     * @param   token The ERC1155 token to call.
-     * @param   wid The ERC1155 token id to transfer.
-     * @param   amount The amount of ERC1155 with `wid` to transfer.
-     * @return  The actual amount of `token` sent in to this contract.
-     */
-    function _internalWrappedTransfer(
-        address token,
-        uint256 wid,
-        uint256 amount
-    ) internal returns (uint256) {
-        uint256 prevBal = IERC1155(token).balanceOf(address(this), wid);
-        IERC1155(token).safeTransferFrom(
-            msg.sender,
-            address(this),
-            wid,
-            amount,
-            ""
-        );
-        uint256 postBal = IERC1155(token).balanceOf(address(this), wid);
-        return postBal.sub(prevBal);
-    }
-
-    /**
-     * @notice  Transfer ERC20 tokens from `msg.sender` to this contract.
-     * @param   token The address of the ERC20 token.
-     * @param   amount The amount of ERC20 tokens to transfer.
-     * @return  The actual amount of `token` sent in to this contract.
-     */
-    function _internalTransfer(address token, uint256 amount)
-        internal
-        returns (uint256)
-    {
-        uint256 prevBal = IERC20(token).balanceOf(address(this));
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        uint256 postBal = IERC20(token).balanceOf(address(this));
-        return postBal.sub(prevBal);
     }
 
     // ===== Collateral Management =====
@@ -315,12 +209,41 @@ contract House is
 
         console.log("pull wrapped tokens");
         // Pull the tokens
-        uint256 actualAmount = _internalWrappedTransfer(token, wid, amount);
+        uint256 actualAmount = _pullWrappedToken(token, wid, amount);
         require(actualAmount > 0, "House: ADD_ZERO");
         console.log("add to account balance");
         // Add the tokens to the executing account state
         acc.balance = acc.balance.add(amount);
         emit CollateralDeposited(_NONCE, token, wid, amount);
+        return actualAmount;
+    }
+
+    function addBatchCollateral(
+        address wrappedToken,
+        uint256[] memory wrappedIds,
+        uint256[] memory amounts
+    ) public isExec returns (uint256) {
+        return _addBatchCollateral(wrappedToken, wrappedIds, amounts);
+    }
+
+    function _addBatchCollateral(
+        address token,
+        uint256[] memory wids,
+        uint256[] memory amounts
+    ) internal returns (uint256) {
+        Account storage acc = _accounts[getExecutingNonce()];
+        if (acc.wrappedToken != token) {
+            console.log("initializing collateral");
+            _initializeCollateral(acc, token, wids[0]);
+        }
+
+        console.log("pull wrapped tokens");
+        // Pull the tokens
+        uint256 actualAmount = _pullBatchWrappedTokens(token, wids, amounts);
+        require(actualAmount > 0, "House: ADD_ZERO");
+        console.log("add to account balance");
+        // Add the tokens to the executing account state
+        //acc.balance = acc.balance.add(amount); //FIX
         return actualAmount;
     }
 
@@ -391,78 +314,6 @@ contract House is
         return true;
     }
 
-    // ===== Internal Balances =====
-
-    function _internalUpdate(address token, uint256 newBalance) internal {
-        _universalDebt[token] = newBalance;
-        emit UpdatedUniversalDebt(_NONCE, token, newBalance);
-    }
-
-    function _quoteClaimUpdate(
-        address shortOption,
-        address token,
-        uint256 newBalance
-    ) internal isExec {
-        _quoteClaim[shortOption][token] = newBalance;
-        emit UpdatedQuoteClaim(_NONCE, shortOption, token, newBalance);
-    }
-
-    function _addAccountDebt(uint256 amount) internal isExec returns (bool) {
-        Account storage acc = _accounts[getExecutingNonce()];
-        acc.debt = acc.debt.add(amount);
-        return true;
-    }
-
-    function _subtractAccountDebt(uint256 amount)
-        internal
-        isExec
-        returns (bool)
-    {
-        Account storage acc = _accounts[getExecutingNonce()];
-        acc.debt = acc.debt.sub(amount);
-        return true;
-    }
-
-    // ===== Option Core =====
-
-    /**
-     * @notice  Mints options to the receiver addresses.
-     * @param   oid The option data id used to fetch option related data.
-     * @param   requestAmt The requestAmt of options requested to be minted.
-     * @param   receivers The long option ERC20 receiver, and short option ERC20 receiver.
-     * @return  Whether or not the mint succeeded.
-     */
-    function mintOptions(
-        bytes32 oid,
-        uint256 requestAmt,
-        address[] memory receivers
-    ) public isEndorsed(msg.sender) isExec returns (bool) {
-        console.log("house.mintOptions");
-        // Execute the mint
-        _core.dangerousMint(oid, requestAmt, receivers); // calls mintingInvariant()
-
-        console.log("dangerously minted");
-        // Update internal base token balance
-        (address baseToken, , , , ) = _core.getParameters(oid);
-        console.log("got parameters", baseToken);
-        uint256 newBalance = _universalDebt[baseToken].add(requestAmt);
-        console.log("house.mintOptions._internalUpdate");
-        _internalUpdate(baseToken, newBalance);
-        // update houseBalance
-        _houseBalance[oid][baseToken] = _houseBalance[oid][baseToken].add(
-            requestAmt
-        );
-
-        console.log("pull base tokens from caller");
-        // pull the base tokens
-        IERC20(baseToken).safeTransferFrom(
-            getExecutingCaller(),
-            address(this),
-            requestAmt
-        );
-        return true;
-    }
-
     /**
      * @notice  Mints options to the receiver addresses without checking collateral.
      * @param   oid The option data id used to fetch option related data.
@@ -474,7 +325,7 @@ contract House is
         bytes32 oid,
         uint256 requestAmt,
         address[] memory receivers
-    ) public isEndorsed(msg.sender) isExec returns (uint256) {
+    ) public isExec returns (uint256) {
         // Get the account that is being updated
         Account storage acc = _accounts[getExecutingNonce()];
         // Update the acc delta
@@ -485,118 +336,6 @@ contract House is
         // Reset delta by subtracting from actual amount borrowed
         acc.delta = actualAmt.sub(acc.delta);
         return actualAmt;
-    }
-
-    function exercise(
-        bytes32 oid,
-        uint256 amount,
-        address receiver,
-        bool fromInternal
-    ) public isEndorsed(msg.sender) isExec returns (bool) {
-        (
-            address baseToken,
-            address quoteToken,
-            uint256 strikePrice,
-            uint32 expiry,
-
-        ) = _core.getParameters(oid);
-        console.log("checking is not expired");
-        require(notExpired(expiry), "House: EXPIRED_OPTION");
-
-        console.log("subtracting base claim");
-        // Update claim for base tokens
-        _houseBalance[oid][baseToken] = _houseBalance[oid][baseToken].sub(
-            amount
-        );
-
-        console.log("pushing base tokens");
-        // Push base tokens
-        IERC20(baseToken).safeTransfer(receiver, amount);
-
-        console.log("_core.dangerousExercise");
-        // Burn long tokens
-        (uint256 lessBase, uint256 plusQuote) =
-            _core.dangerousExercise(oid, amount);
-
-        // Update claim for quote tokens
-        _houseBalance[oid][quoteToken] = _houseBalance[oid][quoteToken].add(
-            plusQuote
-        );
-        console.log("pulling quote tokens");
-        // Pulls quote tokens
-        Account storage acc = _accounts[getExecutingNonce()];
-        address pullFrom = fromInternal ? msg.sender : acc.depositor;
-        IERC20(quoteToken).safeTransferFrom(pullFrom, address(this), plusQuote);
-    }
-
-    function notExpired(uint32 expiry) public view returns (bool) {
-        console.log(expiry >= block.timestamp);
-        return expiry >= block.timestamp;
-    }
-
-    function redeem(
-        bytes32 oid,
-        uint256 amount,
-        address receiver,
-        bool fromInternal
-    ) public isEndorsed(msg.sender) isExec returns (bool) {
-        (, address quoteToken, uint256 strikePrice, uint32 expiry, ) =
-            _core.getParameters(oid);
-        (, address short) = _core.getTokenData(oid);
-        console.log("checking is not expired");
-        require(notExpired(expiry), "House: EXPIRED_OPTION");
-        // if not from internal, pull short options from caller to venue
-        if (!fromInternal) {
-            _takeTokensFromUser(short, amount);
-        }
-
-        uint256 quoteClaim = _houseBalance[oid][quoteToken];
-        uint256 minOutputQuote = amount.mul(strikePrice).div(1 ether);
-        console.log("calling core.dangerousredeem");
-        // Burn long tokens
-        uint256 lessQuote =
-            _core.dangerousRedeem(oid, amount, minOutputQuote, quoteClaim);
-
-        console.log("subtracting base claim");
-        // Update claim for quoteTokens
-        _houseBalance[oid][quoteToken] = quoteClaim.sub(lessQuote);
-
-        console.log("pushing quote tokens");
-        // Push base tokens
-        IERC20(quoteToken).safeTransfer(receiver, lessQuote);
-        return true;
-    }
-
-    function close(
-        bytes32 oid,
-        uint256 amount,
-        address receiver,
-        bool fromInternal
-    ) public isEndorsed(msg.sender) isExec returns (bool) {
-        (address baseToken, , , uint32 expiry, ) = _core.getParameters(oid);
-        (address long, address short) = _core.getTokenData(oid);
-        console.log("checking is not expired");
-        require(notExpired(expiry), "House: EXPIRED_OPTION");
-        // if not from internal, pull short options from caller to venue
-        if (!fromInternal) {
-            console.log("take long and short from user");
-            _takeTokensFromUser(short, amount);
-            _takeTokensFromUser(long, amount);
-        }
-        console.log("calling core.dangerousclose");
-        // Burn long tokens
-        uint256 lessBase = _core.dangerousClose(oid, amount);
-
-        console.log("subtracting base claim");
-        // Update claim for baseTokens
-        _houseBalance[oid][baseToken] = _houseBalance[oid][baseToken].sub(
-            lessBase
-        );
-
-        console.log("pushing base tokens");
-        // Push base tokens
-        IERC20(baseToken).safeTransfer(receiver, lessBase);
-        return true;
     }
 
     // ===== Execution =====
@@ -625,41 +364,267 @@ contract House is
             );
             require(accountNonce < _accountNonce, "House: ABOVE_NONCE");
         }
-        _CALLER = msg.sender;
         _NONCE = accountNonce;
         _VENUE = venue;
         _accelerator.executeCall(venue, params);
-        _CALLER = _NO_ADDRESS;
         _NONCE = _NO_NONCE;
         _VENUE = _NO_ADDRESS;
         emit Executed(msg.sender, venue);
         return true;
     }
 
-    // ====== Invariant Rules ======
+    // ===== Option Hooks =====
+
+    function exercise(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) external isExec returns (bool) {
+        // If exercising from an internal balance, use the Venue's balance of tokens.
+        if (fromInternal) {
+            _EXECUTING_SENDER = getExecutingVenue();
+        }
+        exercise(oid, amount, receiver);
+        _EXECUTING_SENDER = _NO_ADDRESS;
+        return true;
+    }
+
+    function redeem(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) external isExec returns (bool) {
+        // If redeeming from an internal balance, use the Venue's balance of tokens.
+        if (fromInternal) {
+            _EXECUTING_SENDER = getExecutingVenue();
+        }
+        redeem(oid, amount, receiver);
+        _EXECUTING_SENDER = _NO_ADDRESS;
+        return true;
+    }
+
+    function close(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        bool fromInternal
+    ) external isExec returns (bool) {
+        // If closing from an internal balance, use the Venue's balance of tokens.
+        if (fromInternal) {
+            _EXECUTING_SENDER = getExecutingVenue();
+        }
+        close(oid, amount, receiver);
+        _EXECUTING_SENDER = _NO_ADDRESS;
+        return true;
+    }
+
+    /**
+     * @notice  Hook to be implemented by higher-level Manager contract after minting occurs.
+     */
+    function _onAfterMint(
+        bytes32 oid,
+        uint256 amount,
+        address[] memory receivers
+    ) internal override isExec returns (bool) {
+        // Update internal base token balance
+        (address baseToken, , , , ) = getParameters(oid);
+        console.log("got parameters", baseToken);
+        // Update houseBalance
+        _collateralBalance[baseToken] = _collateralBalance[baseToken].add(
+            amount
+        );
+
+        console.log("pull base tokens from caller");
+        // pull the base tokens from acc.depositor
+        IERC20(baseToken).safeTransferFrom(
+            getExecutingCaller(),
+            address(this),
+            amount
+        );
+        return true;
+    }
+
+    /*
+     * @notice Hook to be implemented by higher-level Manager contract before exercising occurs.
+     */
+    function _onBeforeExercise(
+        bytes32 oid,
+        uint256 amount,
+        address receiver
+    ) internal override returns (bool) {
+        (address baseToken, , , , ) = getParameters(oid);
+        console.log("checking is not expired");
+        require(notExpired(oid), "House: EXPIRED_OPTION");
+
+        console.log("subtracting base claim");
+        // Update claim for base tokens
+        _collateralBalance[baseToken] -= amount;
+
+        console.log("pushing base tokens");
+        // Push base tokens
+        IERC20(baseToken).safeTransfer(receiver, amount);
+
+        console.log("_core.dangerousExercise");
+        return true;
+    }
+
+    /**
+     * @notice  Hook to be implemented by higher-level Manager contract after exercising occurs.
+     */
+    function _onAfterExercise(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        uint256 lessBase,
+        uint256 plusQuote
+    ) internal override returns (bool) {
+        (, address quoteToken, , , ) = getParameters(oid);
+        // Update claim for quote tokens
+        _collateralBalance[quoteToken] += plusQuote;
+        console.log("pulling quote tokens");
+        // Pulls quote tokens
+        Account storage acc = _accounts[getExecutingNonce()];
+        //address pullFrom = fromInternal ? msg.sender : acc.depositor;
+        // fromInternal ? getExecutingVenue : getExecutingCaller
+        IERC20(quoteToken).safeTransferFrom(
+            _getExecutingSender(),
+            address(this),
+            plusQuote
+        );
+        return true;
+    }
+
+    /**
+     * @notice  Hook to be implemented by higher-level Manager contract before redemption occurs.
+     */
+    function _onBeforeRedeem(
+        bytes32 oid,
+        uint256 amount,
+        address receiver
+    ) internal override returns (uint256, uint256) {
+        (, address quoteToken, uint256 strikePrice, , ) = getParameters(oid);
+        (, address short) = _core.getTokenData(oid);
+        console.log("checking is not expired");
+        require(notExpired(oid), "House: EXPIRED_OPTION");
+        // if not from internal, pull short options from caller to venue
+        if (_getExecutingSender() == getExecutingCaller()) {
+            console.log("taking tokens from user");
+            _takeTokensFromUser(short, amount);
+        }
+
+        uint256 quoteClaim = _collateralBalance[quoteToken];
+        uint256 minOutputQuote = amount.mul(strikePrice).div(1 ether);
+        console.log("calling core.dangerousredeem");
+        return (minOutputQuote, quoteClaim);
+    }
+
+    /**
+     * @notice  Hook to be implemented by higher-level Manager contract after redemption occurs.
+     */
+    function _onAfterRedeem(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        uint256 lessQuote
+    ) internal override returns (bool) {
+        console.log("subtracting base claim");
+        (, address quoteToken, , , ) = getParameters(oid);
+        // Update claim for quoteTokens
+        _collateralBalance[quoteToken] -= lessQuote;
+
+        console.log("pushing quote tokens");
+        // Push base tokens
+        IERC20(quoteToken).safeTransfer(receiver, lessQuote);
+        return true;
+    }
+
+    /**
+     * @notice  Hook to be implemented by higher-level Manager contract before closing occurs.
+     */
+    function _onBeforeClose(
+        bytes32 oid,
+        uint256 amount,
+        address receiver
+    ) internal override returns (bool) {
+        (address long, address short) = _core.getTokenData(oid);
+        console.log("checking is not expired");
+        require(notExpired(oid), "House: EXPIRED_OPTION");
+        // if not from internal, pull short options from caller to venue
+        if (_getExecutingSender() == getExecutingCaller()) {
+            console.log("take long and short from user");
+            _takeTokensFromUser(short, amount);
+            _takeTokensFromUser(long, amount);
+        }
+        console.log("calling core.dangerousclose");
+        return true;
+    }
+
+    /**
+     * @notice  Hook to be implemented by higher-level Manager contract after closing occurs.
+     */
+    function _onAfterClose(
+        bytes32 oid,
+        uint256 amount,
+        address receiver,
+        uint256 lessBase
+    ) internal override returns (bool) {
+        (address baseToken, , , , ) = getParameters(oid);
+        console.log("subtracting base claim");
+        // Update claim for baseTokens
+        _collateralBalance[baseToken] -= lessBase;
+
+        console.log("pushing base tokens");
+        // Push base tokens
+        IERC20(baseToken).safeTransfer(receiver, lessBase);
+        return true;
+    }
 
     // ===== View =====
 
+    /**
+     * @notice  A mutex that is set when the `execute` fn is called.
+     * @dev     Reset after execute to false.
+     */
     function isExecuting() public view returns (bool) {
         return _EXECUTING;
     }
 
+    /**
+     * @notice  The accountNonce which is being manipulated by the currently executing `execute` fn.
+     * @dev     Reset after execute to _NO_NONCE.
+     */
     function getExecutingNonce() public view returns (uint256) {
         return _NONCE;
     }
 
+    /**
+     * @notice  The `msg.sender` of the `execute` fn.
+     * @dev     Reset after execute to _NO_ADDRESS.
+     */
     function getExecutingCaller() public view returns (address) {
-        return _CALLER;
+        return _accounts[getExecutingNonce()].depositor;
     }
 
+    /**
+     * @notice  The venue that is the `target` address of the `execute` fn.
+     * @dev     Reset after execute to _NO_ADDRESS.
+     */
     function getExecutingVenue() public view returns (address) {
         return _VENUE;
     }
 
+    /**
+     * @notice  Fetches the current account nonce, which will be the nonce of the next Account.
+     */
     function getAccountNonce() public view returns (uint256) {
         return _accountNonce;
     }
 
+    /**
+     * @notice  Fetches the Account struct objects.
+     */
     function getAccount(uint256 accountNonce)
         public
         view
@@ -674,33 +639,33 @@ contract House is
         return (acc.depositor, acc.wrappedToken, acc.wrappedId, acc.balance);
     }
 
-    function getCore() public view returns (address) {
-        return address(_core);
-    }
-
+    /**
+     * @notice  Fetches the Accelerator contract.
+     * @dev     Accelerator is an intemediary to execute the `execute` fn on behalf of this contract.
+     */
     function getAccelerator() public view returns (address) {
         return address(_accelerator);
     }
 
-    function getOptionTokens(bytes32 oid)
-        public
-        view
-        returns (address, address)
-    {
-        return _core.getTokenData(oid);
+    // === View Hooks ===
+
+    /**
+     * @notice  If `_EXECUTING_SENDER` is `_NO_ADDRESS`, use Account.depositor, else use the `_VENUE`.
+     * @dev     Overrides the virtual hook in abstract Manager contract.
+     */
+    function _getExecutingSender() internal view override returns (address) {
+        return
+            _EXECUTING_SENDER == _NO_ADDRESS
+                ? getExecutingCaller()
+                : getExecutingVenue();
     }
 
-    function getParameters(bytes32 oid)
-        public
-        view
-        returns (
-            address,
-            address,
-            uint256,
-            uint32,
-            uint8
-        )
-    {
-        return _core.getParameters(oid);
+    /**
+     * @notice  Returns true if the expiry timestamp of an option is greater than or equal to current timestamp.
+     * @dev     Overrides the virtual hook in abstract Manager contract.
+     */
+    function _notExpired(bytes32 oid) internal view override returns (bool) {
+        (, , , uint32 expiry, ) = getParameters(oid);
+        return expiry >= block.timestamp;
     }
 }

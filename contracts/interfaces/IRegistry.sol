@@ -36,9 +36,18 @@ interface IRegistry {
         bool isCall
     ) external view returns (bytes32);
 
+    function getOptionIdFromAddress(address option)
+        external
+        view
+        returns (bytes32);
+
     // ===== Pure =====
     function generateType(bool isCall)
         external
         pure
         returns (uint8, string calldata);
+
+    function CALL() external pure returns (uint8);
+
+    function PUT() external pure returns (uint8);
 }
