@@ -10,7 +10,7 @@ pragma experimental ABIEncoderV2;
 
 import {Registry} from "./Registry.sol";
 import {IPrimitiveERC20, IERC20} from "./interfaces/IPrimitiveERC20.sol";
-import {IWToken} from "./interfaces/IWToken.sol";
+import {IMultiToken} from "./interfaces/IMultiToken.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 

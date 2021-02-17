@@ -7,6 +7,12 @@ interface IHouse {
         uint256 amount
     ) external returns (uint256);
 
+    function addBatchCollateral(
+        address wrappedToken,
+        uint256[] calldata wrappedIds,
+        uint256[] calldata amounts
+    ) external returns (uint256);
+
     function removeCollateral(
         address wrappedToken,
         uint256 wrappedId,

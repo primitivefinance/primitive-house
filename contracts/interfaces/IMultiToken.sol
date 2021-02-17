@@ -2,7 +2,7 @@ pragma solidity ^0.7.1;
 
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
-interface IWToken is IERC1155 {
+interface IMultiToken is IERC1155 {
     function mint(address token, uint256 amount) external;
 
     function burn(address token, uint256 amount) external;
@@ -14,6 +14,10 @@ interface IWToken is IERC1155 {
         address short,
         uint256 amount
     ) external;
+
+    function mintBatch(address[] calldata tokens, uint256[] calldata amounts)
+        external
+        returns (uint256[] calldata, uint256[] calldata);
 
     function burnOption(
         bytes32 oid,

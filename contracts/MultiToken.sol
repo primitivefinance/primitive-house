@@ -14,9 +14,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {
     ReentrancyGuard
 } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {IWToken} from "./interfaces/IWToken.sol";
+import {IMultiToken} from "./interfaces/IMultiToken.sol";
 
-contract wToken is ERC1155("wToken"), ReentrancyGuard, IWToken {
+contract MultiToken is ERC1155("MultiToken"), ReentrancyGuard, IMultiToken {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -34,6 +34,32 @@ contract wToken is ERC1155("wToken"), ReentrancyGuard, IWToken {
         uint256 balanceDiff = postBal.sub(prevBal);
         uint256 id = uint256(token);
         _mint(msg.sender, id, balanceDiff, "");
+    }
+
+    function mintBatch(address[] memory tokens, uint256[] memory amounts)
+        external
+        override
+        nonReentrant
+        returns (uint256[] memory, uint256[] memory)
+    {
+        uint256 tokensLength = tokens.length;
+        require(tokensLength == amounts.length, "MultiToken: ARG_LENGTHS");
+        // store current balance to check against the balance after tokens have been pulled.
+        uint256[] memory ids = new uint256[](tokensLength);
+        uint256[] memory differences = new uint256[](tokensLength);
+        for (uint256 i = 0; i < tokensLength; i++) {
+            address token = tokens[i];
+            uint256 amount = amounts[i];
+            uint256 prevBal = IERC20(token).balanceOf(address(this));
+            IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+            uint256 postBal = IERC20(token).balanceOf(address(this));
+            uint256 balanceDiff = postBal.sub(prevBal);
+            uint256 id = uint256(token);
+            ids[i] = id;
+            differences[i] = balanceDiff;
+        }
+        _mintBatch(msg.sender, ids, differences, "");
+        return (ids, differences);
     }
 
     function burn(address token, uint256 amount)

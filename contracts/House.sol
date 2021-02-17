@@ -26,11 +26,11 @@ import {IHouse} from "./interfaces/IHouse.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {Manager} from "./Manager.sol";
-import {pERC1155Receiver} from "./utils/pERC1155Receiver.sol";
+import {BasicERC1155Receiver} from "./utils/BasicERC1155Receiver.sol";
 
 import "hardhat/console.sol";
 
-contract House is Manager, Accelerator, ReentrancyGuard, pERC1155Receiver {
+contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -218,6 +218,35 @@ contract House is Manager, Accelerator, ReentrancyGuard, pERC1155Receiver {
         return actualAmount;
     }
 
+    function addBatchCollateral(
+        address wrappedToken,
+        uint256[] memory wrappedIds,
+        uint256[] memory amounts
+    ) public isExec returns (uint256) {
+        return _addBatchCollateral(wrappedToken, wrappedIds, amounts);
+    }
+
+    function _addBatchCollateral(
+        address token,
+        uint256[] memory wids,
+        uint256[] memory amounts
+    ) internal returns (uint256) {
+        Account storage acc = _accounts[getExecutingNonce()];
+        if (acc.wrappedToken != token) {
+            console.log("initializing collateral");
+            _initializeCollateral(acc, token, wids[0]);
+        }
+
+        console.log("pull wrapped tokens");
+        // Pull the tokens
+        uint256 actualAmount = _pullBatchWrappedTokens(token, wids, amounts);
+        require(actualAmount > 0, "House: ADD_ZERO");
+        console.log("add to account balance");
+        // Add the tokens to the executing account state
+        //acc.balance = acc.balance.add(amount); //FIX
+        return actualAmount;
+    }
+
     /**
      * @notice  Called to update an Account with `_NONCE` with a `token` and `wid`.
      * @param   acc The Account to manipulate, fetched with the executing `_NONCE`.
@@ -285,45 +314,66 @@ contract House is Manager, Accelerator, ReentrancyGuard, pERC1155Receiver {
         return true;
     }
 
-    // ===== Implemented Option Core Hooks =====
-
-    function _getExecutingSender() internal view override returns (address) {
-        return
-            _EXECUTING_SENDER == _NO_ADDRESS
-                ? getExecutingCaller()
-                : getExecutingVenue();
+    /**
+     * @notice  Mints options to the receiver addresses without checking collateral.
+     * @param   oid The option data id used to fetch option related data.
+     * @param   requestAmt The requestAmt of long and short option ERC20 tokens to mint.
+     * @param   receivers The long option ERC20 receiver, and short option ERC20 receiver.
+     * @return  Whether or not the mint succeeded.
+     */
+    function borrowOptions(
+        bytes32 oid,
+        uint256 requestAmt,
+        address[] memory receivers
+    ) public isExec returns (uint256) {
+        // Get the account that is being updated
+        Account storage acc = _accounts[getExecutingNonce()];
+        // Update the acc delta
+        acc.delta = requestAmt;
+        // Update acc debt balance
+        acc.balance = acc.balance.add(requestAmt);
+        uint256 actualAmt = _core.dangerousMint(oid, requestAmt, receivers);
+        // Reset delta by subtracting from actual amount borrowed
+        acc.delta = actualAmt.sub(acc.delta);
+        return actualAmt;
     }
 
-    function _notExpired(bytes32 oid) internal view override returns (bool) {
-        (, , , uint32 expiry, ) = getParameters(oid);
-        return expiry >= block.timestamp;
-    }
+    // ===== Execution =====
 
     /**
-     * @notice  Hook to be implemented by higher-level Manager contract after minting occurs.
+     * @notice  Manipulates an Account with `accountNonce` using a venue.
+     * @dev     Warning: low-level call is executed by `_accelerator` contract.
+     * @param   accountNonce The Account to manipulate.
+     * @param   venue The Venue to call and execute `params`.
+     * @param   params The encoded selector and arguments for the `_accelerator` to call `venue` with.
+     * @return  Whether the execution succeeded or not.
      */
-    function _onAfterMint(
-        bytes32 oid,
-        uint256 amount,
-        address[] memory receivers
-    ) internal override isExec returns (bool) {
-        // Update internal base token balance
-        (address baseToken, , , , ) = getParameters(oid);
-        console.log("got parameters", baseToken);
-        // Update houseBalance
-        _collateralBalance[baseToken] = _collateralBalance[baseToken].add(
-            amount
-        );
-
-        console.log("pull base tokens from caller");
-        // pull the base tokens from acc.depositor
-        IERC20(baseToken).safeTransferFrom(
-            getExecutingCaller(),
-            address(this),
-            amount
-        );
+    function execute(
+        uint256 accountNonce,
+        address venue,
+        bytes calldata params
+    ) external payable nonReentrant returns (bool) {
+        // Get the Account to manipulate
+        if (accountNonce == 0) {
+            accountNonce = _accountNonce++;
+            _accounts[accountNonce].depositor = msg.sender;
+        } else {
+            require(
+                _accounts[accountNonce].depositor == msg.sender,
+                "House: NOT_DEPOSITOR"
+            );
+            require(accountNonce < _accountNonce, "House: ABOVE_NONCE");
+        }
+        _NONCE = accountNonce;
+        _VENUE = venue;
+        _accelerator.executeCall(venue, params);
+        _NONCE = _NO_NONCE;
+        _VENUE = _NO_ADDRESS;
+        emit Executed(msg.sender, venue);
         return true;
     }
+
+    // ===== Option Hooks =====
 
     function exercise(
         bytes32 oid,
@@ -367,6 +417,32 @@ contract House is Manager, Accelerator, ReentrancyGuard, pERC1155Receiver {
         }
         close(oid, amount, receiver);
         _EXECUTING_SENDER = _NO_ADDRESS;
+        return true;
+    }
+
+    /**
+     * @notice  Hook to be implemented by higher-level Manager contract after minting occurs.
+     */
+    function _onAfterMint(
+        bytes32 oid,
+        uint256 amount,
+        address[] memory receivers
+    ) internal override isExec returns (bool) {
+        // Update internal base token balance
+        (address baseToken, , , , ) = getParameters(oid);
+        console.log("got parameters", baseToken);
+        // Update houseBalance
+        _collateralBalance[baseToken] = _collateralBalance[baseToken].add(
+            amount
+        );
+
+        console.log("pull base tokens from caller");
+        // pull the base tokens from acc.depositor
+        IERC20(baseToken).safeTransferFrom(
+            getExecutingCaller(),
+            address(this),
+            amount
+        );
         return true;
     }
 
@@ -505,65 +581,6 @@ contract House is Manager, Accelerator, ReentrancyGuard, pERC1155Receiver {
         return true;
     }
 
-    /**
-     * @notice  Mints options to the receiver addresses without checking collateral.
-     * @param   oid The option data id used to fetch option related data.
-     * @param   requestAmt The requestAmt of long and short option ERC20 tokens to mint.
-     * @param   receivers The long option ERC20 receiver, and short option ERC20 receiver.
-     * @return  Whether or not the mint succeeded.
-     */
-    function borrowOptions(
-        bytes32 oid,
-        uint256 requestAmt,
-        address[] memory receivers
-    ) public isExec returns (uint256) {
-        // Get the account that is being updated
-        Account storage acc = _accounts[getExecutingNonce()];
-        // Update the acc delta
-        acc.delta = requestAmt;
-        // Update acc debt balance
-        acc.balance = acc.balance.add(requestAmt);
-        uint256 actualAmt = _core.dangerousMint(oid, requestAmt, receivers);
-        // Reset delta by subtracting from actual amount borrowed
-        acc.delta = actualAmt.sub(acc.delta);
-        return actualAmt;
-    }
-
-    // ===== Execution =====
-
-    /**
-     * @notice  Manipulates an Account with `accountNonce` using a venue.
-     * @dev     Warning: low-level call is executed by `_accelerator` contract.
-     * @param   accountNonce The Account to manipulate.
-     * @param   venue The Venue to call and execute `params`.
-     * @param   params The encoded selector and arguments for the `_accelerator` to call `venue` with.
-     * @return  Whether the execution succeeded or not.
-     */
-    function execute(
-        uint256 accountNonce,
-        address venue,
-        bytes calldata params
-    ) external payable nonReentrant returns (bool) {
-        // Get the Account to manipulate
-        if (accountNonce == 0) {
-            accountNonce = _accountNonce++;
-            _accounts[accountNonce].depositor = msg.sender;
-        } else {
-            require(
-                _accounts[accountNonce].depositor == msg.sender,
-                "House: NOT_DEPOSITOR"
-            );
-            require(accountNonce < _accountNonce, "House: ABOVE_NONCE");
-        }
-        _NONCE = accountNonce;
-        _VENUE = venue;
-        _accelerator.executeCall(venue, params);
-        _NONCE = _NO_NONCE;
-        _VENUE = _NO_ADDRESS;
-        emit Executed(msg.sender, venue);
-        return true;
-    }
-
     // ===== View =====
 
     /**
@@ -628,5 +645,27 @@ contract House is Manager, Accelerator, ReentrancyGuard, pERC1155Receiver {
      */
     function getAccelerator() public view returns (address) {
         return address(_accelerator);
+    }
+
+    // === View Hooks ===
+
+    /**
+     * @notice  If `_EXECUTING_SENDER` is `_NO_ADDRESS`, use Account.depositor, else use the `_VENUE`.
+     * @dev     Overrides the virtual hook in abstract Manager contract.
+     */
+    function _getExecutingSender() internal view override returns (address) {
+        return
+            _EXECUTING_SENDER == _NO_ADDRESS
+                ? getExecutingCaller()
+                : getExecutingVenue();
+    }
+
+    /**
+     * @notice  Returns true if the expiry timestamp of an option is greater than or equal to current timestamp.
+     * @dev     Overrides the virtual hook in abstract Manager contract.
+     */
+    function _notExpired(bytes32 oid) internal view override returns (bool) {
+        (, , , uint32 expiry, ) = getParameters(oid);
+        return expiry >= block.timestamp;
     }
 }

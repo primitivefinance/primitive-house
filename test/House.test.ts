@@ -7,7 +7,7 @@ import { parseEther, formatEther } from 'ethers/lib/utils'
 import { ethers, waffle } from 'hardhat'
 import { deploy } from '../scripts/deploy'
 import { deployTokens, deployWeth, batchApproval, tokenFromAddress } from './lib/erc20'
-import { deployWrappedToken } from './lib/wToken'
+import { deployMultiToken } from './lib/MultiToken'
 import {} from './lib/protocol'
 import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
@@ -19,7 +19,7 @@ describe('House', function () {
   let house: Contract
   let signer: SignerWithAddress
   let Alice: string
-  let tokens: Contract[], comp: Contract, dai: Contract, wToken: Contract
+  let tokens: Contract[], comp: Contract, dai: Contract, MultiToken: Contract
   let venue: Contract
   let manager: Contract
   let core: Contract
@@ -54,7 +54,7 @@ describe('House', function () {
     weth = await deployWeth(signer)
     tokens = await deployTokens(signer, 2, ['comp', 'dai'])
     ;[comp, dai] = tokens
-    wToken = await deployWrappedToken(signer)
+    MultiToken = await deployMultiToken(signer)
 
     // 3. select option params
     baseToken = comp
@@ -67,7 +67,7 @@ describe('House', function () {
     house = await deploy('House', { from: signers[0], args: [AddressZero] })
 
     // 5. deploy venue
-    venue = await deploy('BasicVenue', { from: signers[0], args: [weth.address, house.address, wToken.address] })
+    venue = await deploy('BasicVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address] })
 
     // 6. deploy core with the house as the manager
     core = await deploy('Core', { from: signers[0], args: [house.address] })
@@ -106,8 +106,8 @@ describe('House', function () {
   afterEach(async function () {
     let contractNames: string[] = ['House', 'Venue']
     let contracts = [house, venue]
-    let addresses = [signer.address, wToken.address]
-    let addressNamesArray: string[] = ['Alice', 'wToken']
+    let addresses = [signer.address, MultiToken.address]
+    let addressNamesArray: string[] = ['Alice', 'MultiToken']
     await generateReport(contractNames, contracts, tokens, addresses, addressNamesArray)
   })
 
@@ -119,10 +119,10 @@ describe('House', function () {
     beforeEach(async function () {})
 
     it('weth()', async () => {
-      expect(await venue.weth()).to.eq(weth.address)
+      expect(await venue.getWeth()).to.eq(weth.address)
     })
     it('house()', async () => {
-      expect(await venue.house()).to.eq(house.address)
+      expect(await venue.getHouse()).to.eq(house.address)
     })
   })
 
