@@ -11,20 +11,25 @@ interface ICore is IRegistry, IFactory {
         address[] calldata receivers
     ) external returns (uint256);
 
-    function dangerousExercise(bytes32 oid, uint256 amount)
-        external
-        returns (uint256, uint256);
+    function dangerousExercise(
+        bytes32 oid,
+        address sender,
+        uint256 amount
+    ) external returns (uint256, uint256);
 
     function dangerousRedeem(
         bytes32 oid,
-        uint256 inputShort,
+        address sender,
+        uint256 amount,
         uint256 minOutputQuote,
         uint256 quoteBalance
     ) external returns (uint256);
 
-    function dangerousClose(bytes32 oid, uint256 amount)
-        external
-        returns (uint256);
+    function dangerousClose(
+        bytes32 oid,
+        address sender,
+        uint256 amount
+    ) external returns (uint256);
 
     function getOptionBalances(bytes32 oid, address account)
         external
