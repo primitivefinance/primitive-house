@@ -101,26 +101,6 @@ contract BasicVenue is VaultVenue {
         _redeemOptions(oid, amount, receiver, true);
     }
 
-    function redeemFromWrappedBalance(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public {
-        // Receivers are this address
-        address[] memory receivers = new address[](2);
-        receivers[0] = address(this);
-        receivers[1] = address(this);
-        splitOptionsAndDeposit(oid, amount, receivers);
-
-        (address long, ) = _house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
-        console.log("checking balance in venue", balance, amount);
-        require(balance >= amount, "Venue: ABOVE_MAX");
-        // exercise options using the House
-        console.log("venue._exerciseOptions");
-        _redeemOptions(oid, amount, receiver, true);
-    }
-
     function closeFromWrappedBalance(
         bytes32 oid,
         uint256 amount,
