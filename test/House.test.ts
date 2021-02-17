@@ -13,7 +13,8 @@ import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
 const { AddressZero } = ethers.constants
 
-describe('House', function () {
+describe("House integration tests", function () {
+
   let signers: SignerWithAddress[]
   let weth: Contract
   let house: Contract
@@ -44,7 +45,49 @@ describe('House', function () {
     return array
   }
 
-  before(async function () {
+  const setTest = (venue: Contract, signer: string) => {
+    let quantity: BigNumber = parseEther('1')
+    let params: any = venue.interface.encodeFunctionData('setTest', [quantity])
+    return house.execute(0, venue.address, params)
+  }
+
+  const venueDeposit = (venue: Contract, receiver: string, oid: string) => {
+    let amount: BigNumber = parseEther('1')
+    let params: any = venue.interface.encodeFunctionData('deposit', [oid, amount, receiver])
+    return house.execute(0, venue.address, params)
+  }
+
+  const venueMintWrap = (venue: Contract, receiver: string, oid: string) => {
+    let amount: BigNumber = parseEther('1')
+    let params: any = venue.interface.encodeFunctionData('mintOptionsThenWrap', [oid, amount, receiver])
+    return house.execute(0, venue.address, params)
+  }
+// todo, util function to simply mint options for user on demand
+  const venueSplitDeposit = (venue: Contract, receiver: string, oid: string) => {
+    let amount: BigNumber = parseEther('1')
+    let params: any = venue.interface.encodeFunctionData('splitOptionsAndDeposit', [oid, amount, [receiver, receiver]])
+    return house.execute(1, venue.address, params)
+  }
+
+  const quoteTokenDeposit = (venue: Contract, receiver: string, quoteToken: Contract) => {
+    let amount: BigNumber = parseEther('2')
+    // deposit quote tokens to balance
+    let depositParams: any = venue.interface.encodeFunctionData('depositToken', [
+      quoteToken.address,
+      amount.mul(strikePrice).div(parseEther('1')),
+      receiver,
+    ])
+    return house.execute(1, venue.address, depositParams)
+  }
+
+  const venueExercise = (venue: Contract, receiver: string, oid: string, quoteToken: Contract) => {
+    let amount: BigNumber = parseEther('2')
+
+    let params: any = venue.interface.encodeFunctionData('exerciseFromBalance', [oid, amount, receiver])
+    return house.execute(1, venue.address, params)
+  }
+
+  beforeEach(async function() {
     // 1. get signers
     signers = await ethers.getSigners()
     signer = signers[0]
@@ -94,8 +137,8 @@ describe('House', function () {
     let addressNamesArray: string[] = ['Alice']
     tokens.push(longToken)
     tokens.push(shortToken)
-    console.log(await shortToken.symbol(), await longToken.symbol(), longToken.address == shortToken.address)
-    await generateReport(contractNames, contracts, tokens, addresses, addressNamesArray)
+    //console.log(await shortToken.symbol(), await longToken.symbol(), longToken.address == shortToken.address)
+    //await generateReport(contractNames, contracts, tokens, addresses, addressNamesArray)
 
     // approve base tokens to be pulled from caller
     await baseToken.approve(house.address, ethers.constants.MaxUint256)
@@ -111,217 +154,154 @@ describe('House', function () {
     await generateReport(contractNames, contracts, tokens, addresses, addressNamesArray)
   })
 
-  describe('House.constructor', function () {
-    beforeEach(async function () {})
+  it('weth()', async () => {
+    expect(await venue.getWeth()).to.eq(weth.address)
+  })
+  
+  it('house()', async () => {
+    expect(await venue.getHouse()).to.eq(house.address)
   })
 
-  describe('Venue.constructor', function () {
-    beforeEach(async function () {})
-
-    it('weth()', async () => {
-      expect(await venue.getWeth()).to.eq(weth.address)
-    })
-    it('house()', async () => {
-      expect(await venue.getHouse()).to.eq(house.address)
-    })
+  it('Caller can deposit an option in the venue', async () => {
+    let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('1'), Alice])
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
   })
 
-  describe('House.execute', function () {
-    beforeEach(async function () {})
+  it('Depositor can use venue to mint long and short options, wrap them, and deposit them into the house', async () => {
+    let params: any = venue.interface.encodeFunctionData('mintOptionsThenWrap', [oid, parseEther('1'), Alice])
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+  })
 
-    it('setTest', async () => {
-      let depositor: string = signer.address
-      let venueAddress: string = venue.address
-      let quantity: BigNumber = parseEther('1')
-      let params: any = venue.interface.encodeFunctionData('setTest', [quantity])
-      await expect(house.execute(0, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-    })
+  it('Depositor can use venue to split wrapped options into long and short tokens and send them (update the balance of) the receivers.', async () => {
+    let receivers: string[] = [Alice, Alice]
+    await venueDeposit(venue, Alice, oid)
+    await venueMintWrap(venue, Alice, oid)
+    let params: any = venue.interface.encodeFunctionData('splitOptionsAndDeposit', [oid, parseEther('1'), receivers])
+    await expect(house.execute(1, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+  })
 
-    it('venue.deposit', async () => {
-      let depositor: string = signer.address
-      let venueAddress: string = venue.address
-      let amount: BigNumber = parseEther('1')
-      let receiver: string = Alice
-      let params: any = venue.interface.encodeFunctionData('deposit', [oid, amount, receiver])
-      await expect(house.execute(0, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-    })
+  it('Caller can use venue to exercise options (burn long tokens, pay quote tokens, and receive underlying)', async () => {
+    await venueDeposit(venue, Alice, oid)
+    await venueMintWrap(venue, Alice, oid)
+    await venueSplitDeposit(venue, Alice, oid)
 
-    it('venue.mintOptionsThenWrap', async () => {
-      let depositor: string = signer.address
-      let venueAddress: string = venue.address
-      let amount: BigNumber = parseEther('1')
-      let receiver: string = Alice
-      let params: any = venue.interface.encodeFunctionData('mintOptionsThenWrap', [oid, amount, receiver])
-      await expect(house.execute(1, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-    })
+    let amount: BigNumber = parseEther('2')
+    // approve quote tokens to be pulled from user to the venue.
+    await quoteToken.approve(venue.address, ethers.constants.MaxUint256)
+    // deposit quote tokens to balance
+    let depositParams: any = venue.interface.encodeFunctionData('depositToken', [
+      quoteToken.address,
+      amount.mul(strikePrice).div(parseEther('1')),
+      Alice,
+    ])
+    await expect(house.execute(1, venue.address, depositParams))
+      .to.emit(house, 'Executed')
+      .withArgs(signer.address, venue.address)
 
-    it('venue.splitOptionsAndDeposit', async () => {
-      let depositor: string = signer.address
-      let venueAddress: string = venue.address
-      let amount: BigNumber = parseEther('1')
-      let receivers: string[] = [Alice, Alice]
-      let params: any = venue.interface.encodeFunctionData('splitOptionsAndDeposit', [oid, amount, receivers])
-      await expect(house.execute(1, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-    })
+    let prevBaseBal = await baseToken.balanceOf(Alice)
+    let receiver: string = Alice
+    let params: any = venue.interface.encodeFunctionData('exerciseFromBalance', [oid, amount, receiver])
+    await expect(house.execute(1, venue.address, params)).to.emit(house, 'Executed').withArgs(signer.address, venue.address)
+    let postBaseBal = await baseToken.balanceOf(Alice)
+    let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
+    expect(baseBalDiff).to.eq(amount)
+  })
 
-    it('venue.exerciseFromBalance', async () => {
-      let amount: BigNumber = parseEther('2')
-      // approve quote tokens to be pulled from user to the venue.
-      await quoteToken.approve(venue.address, ethers.constants.MaxUint256)
-      // deposit quote tokens to balance
-      let depositParams: any = venue.interface.encodeFunctionData('depositToken', [
-        quoteToken.address,
-        amount.mul(strikePrice).div(parseEther('1')),
-        Alice,
-      ])
-      await expect(house.execute(1, venue.address, depositParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
+  it('Caller can use venue to redeem option and claim underlying when they hold both long and short tokens', async () => {
+    await venueDeposit(venue, Alice, oid)
+    await venueMintWrap(venue, Alice, oid)
+    await venueSplitDeposit(venue, Alice, oid)
+    // approve quote tokens to be pulled from user to the venue.
+    await quoteToken.approve(venue.address, ethers.constants.MaxUint256)
+    await quoteTokenDeposit(venue, Alice, quoteToken)
+    await venueExercise(venue, Alice, oid, quoteToken)
+    let amount: BigNumber = parseEther('1')
 
-      console.log('finished 1st execution to deposit quote tokens')
-      let prevBaseBal = await baseToken.balanceOf(Alice)
-      let venueAddress: string = venue.address
-      let receiver: string = Alice
-      let params: any = venue.interface.encodeFunctionData('exerciseFromBalance', [oid, amount, receiver])
-      await expect(house.execute(1, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-      let postBaseBal = await baseToken.balanceOf(Alice)
-      let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
-      expect(baseBalDiff).to.eq(amount)
-    })
+    let prevBaseBal = await quoteToken.balanceOf(Alice)
+    let receiver: string = Alice
+    let params: any = venue.interface.encodeFunctionData('redeemFromBalance', [oid, amount, receiver])
+    await expect(house.execute(1, venue.address, params)).to.emit(house, 'Executed').withArgs(signer.address, venue.address)
+    let postBaseBal = await quoteToken.balanceOf(Alice)
+    let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
+    expect(baseBalDiff).to.eq(amount.mul(strikePrice).div(parseEther('1')))
+  })
 
-    it('venue.redeemFromBalance', async () => {
-      let amount: BigNumber = parseEther('1')
+  it('Caller can use venue to close options when they hold wrapped option tokens (which contain both long and short tokens)', async () => {
+    // mint and wrap 1 option
+    let amount: BigNumber = parseEther('2')
+    let receiver: string = Alice
 
-      let prevBaseBal = await quoteToken.balanceOf(Alice)
-      let venueAddress: string = venue.address
-      let receiver: string = Alice
-      let params: any = venue.interface.encodeFunctionData('redeemFromBalance', [oid, amount, receiver])
-      await expect(house.execute(1, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-      let postBaseBal = await quoteToken.balanceOf(Alice)
-      let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
-      expect(baseBalDiff).to.eq(amount.mul(strikePrice).div(parseEther('1')))
-    })
+    let mintParams2: any = venue.interface.encodeFunctionData('deposit', [oid, amount, receiver])
+    await house.execute(0, venue.address, mintParams2)
 
-    it('venue.redeemFromWrappedBalance', async () => {
-      // mint and wrap 1 option
-      let amount: BigNumber = parseEther('2')
-      let doubleAmount: BigNumber = parseEther('2')
-      let receiver: string = Alice
-      let mintParams: any = venue.interface.encodeFunctionData('mintOptionsThenWrap', [oid, doubleAmount, receiver])
-      await expect(house.execute(1, venue.address, mintParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
+    let mintParams: any = venue.interface.encodeFunctionData('mintOptionsThenWrap', [oid, amount, receiver])
+    await expect(house.execute(0, venue.address, mintParams))
+      .to.emit(house, 'Executed')
+      .withArgs(signer.address, venue.address)
 
-      let mintParams2: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('1'), receiver])
-      await expect(house.execute(1, venue.address, mintParams2))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
-      console.log('finished 1st execution')
+    // redeem from wrapped balance
+    let prevBaseBal = await baseToken.balanceOf(Alice)
+    let params: any = venue.interface.encodeFunctionData('closeFromWrappedBalance', [oid, amount, receiver])
+    await expect(house.execute(1, venue.address, params)).to.emit(house, 'Executed').withArgs(signer.address, venue.address)
+    let postBaseBal = await baseToken.balanceOf(Alice)
+    let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
+    expect(baseBalDiff).to.eq(amount)
+  })
 
-      // exercise from wrapped balance
-      await quoteToken.approve(venue.address, ethers.constants.MaxUint256)
-      // deposit quote tokens to balance
-      let depositParams: any = venue.interface.encodeFunctionData('depositToken', [
-        quoteToken.address,
-        amount.mul(strikePrice).div(parseEther('1')),
-        Alice,
-      ])
-      await expect(house.execute(1, venue.address, depositParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
+  it('Caller can use venue to close options when they hold both long and short tokens in the venue', async () => {
+    // approve tokens
+    const max = ethers.constants.MaxUint256
+    await longToken.approve(house.address, max)
+    await shortToken.approve(house.address, max)
+    // mint options and deposit
+    let amount: BigNumber = parseEther('1')
+    let receiver: string = Alice
+    let mintParams: any = venue.interface.encodeFunctionData('deposit', [oid, amount, receiver])
+    await expect(house.execute(0, venue.address, mintParams))
+      .to.emit(house, 'Executed')
+      .withArgs(signer.address, venue.address)
 
-      console.log('finished 2nd execution')
+    // close from balance
+    let prevBaseBal = await baseToken.balanceOf(Alice)
+    let params: any = venue.interface.encodeFunctionData('closeFromBalance', [oid, amount, receiver])
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(signer.address, venue.address)
+    let postBaseBal = await baseToken.balanceOf(Alice)
+    let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
+    expect(baseBalDiff).to.eq(amount)
+  })
 
-      let exerciseParams: any = venue.interface.encodeFunctionData('exerciseFromBalance', [oid, parseEther('1'), receiver])
-      await expect(house.execute(1, venue.address, exerciseParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
+  it('Caller can use venue to close options when they hold both long and short options in their wallet', async () => {
+    // approve tokens
+    const max = ethers.constants.MaxUint256
+    await longToken.approve(house.address, max)
+    await shortToken.approve(house.address, max)
+    // mint options and deposit
+    let amount: BigNumber = parseEther('2')
+    let receiver: string = Alice
+    await venueDeposit(venue, Alice, oid)
+    await venueMintWrap(venue, Alice, oid)
+    await venueSplitDeposit(venue, Alice, oid)
+    let mintParams: any = venue.interface.encodeFunctionData('deposit', [oid, amount, receiver])
+    await expect(house.execute(1, venue.address, mintParams))
+      .to.emit(house, 'Executed')
+      .withArgs(signer.address, venue.address)
 
-      console.log('finished 3rd execution')
+    // withdraw options
+    let withdrawParams: any = venue.interface.encodeFunctionData('withdraw', [oid, amount, [receiver, receiver]])
+    await expect(house.execute(1, venue.address, withdrawParams))
+      .to.emit(house, 'Executed')
+      .withArgs(signer.address, venue.address)
 
-      // redeem from wrapped balance
-      let prevBaseBal = await quoteToken.balanceOf(Alice)
-      let venueAddress: string = venue.address
-      let params: any = venue.interface.encodeFunctionData('redeemFromWrappedBalance', [oid, parseEther('1'), receiver])
-      await expect(house.execute(1, venueAddress, params)).to.be.reverted
-      let postBaseBal = await quoteToken.balanceOf(Alice)
-      let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
-      expect(baseBalDiff).to.eq('0')
-    })
+    let longBal = await longToken.balanceOf(Alice)
+    let shortBal = await shortToken.balanceOf(Alice)
+    expect(longBal).to.eq(shortBal).to.eq(amount)
 
-    it('venue.closeFromWrappedBalance', async () => {
-      // mint and wrap 1 option
-      let amount: BigNumber = parseEther('2')
-      let receiver: string = Alice
-      let mintParams: any = venue.interface.encodeFunctionData('mintOptionsThenWrap', [oid, amount, receiver])
-      await expect(house.execute(1, venue.address, mintParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
-
-      // redeem from wrapped balance
-      let prevBaseBal = await baseToken.balanceOf(Alice)
-      let venueAddress: string = venue.address
-      let params: any = venue.interface.encodeFunctionData('closeFromWrappedBalance', [oid, amount, receiver])
-      await expect(house.execute(1, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-      let postBaseBal = await baseToken.balanceOf(Alice)
-      let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
-      expect(baseBalDiff).to.eq(amount)
-    })
-
-    it('venue.closeFromBalance', async () => {
-      // approve tokens
-      const max = ethers.constants.MaxUint256
-      await longToken.approve(house.address, max)
-      await shortToken.approve(house.address, max)
-      // mint options and deposit
-      let amount: BigNumber = parseEther('1')
-      let receiver: string = Alice
-      let mintParams: any = venue.interface.encodeFunctionData('deposit', [oid, amount, receiver])
-      await expect(house.execute(1, venue.address, mintParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
-
-      // close from balance
-      let prevBaseBal = await baseToken.balanceOf(Alice)
-      let venueAddress: string = venue.address
-      let params: any = venue.interface.encodeFunctionData('closeFromBalance', [oid, amount, receiver])
-      await expect(house.execute(1, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-      let postBaseBal = await baseToken.balanceOf(Alice)
-      let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
-      expect(baseBalDiff).to.eq(amount)
-    })
-
-    it('venue.close', async () => {
-      // approve tokens
-      const max = ethers.constants.MaxUint256
-      await longToken.approve(house.address, max)
-      await shortToken.approve(house.address, max)
-      // mint options and deposit
-      let amount: BigNumber = parseEther('2')
-      let receiver: string = Alice
-      let mintParams: any = venue.interface.encodeFunctionData('deposit', [oid, amount, receiver])
-      await expect(house.execute(1, venue.address, mintParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
-
-      // withdraw options
-      let withdrawParams: any = venue.interface.encodeFunctionData('withdraw', [oid, amount, [receiver, receiver]])
-      await expect(house.execute(1, venue.address, withdrawParams))
-        .to.emit(house, 'Executed')
-        .withArgs(signer.address, venue.address)
-
-      let longBal = await longToken.balanceOf(Alice)
-      let shortBal = await shortToken.balanceOf(Alice)
-      expect(longBal).to.eq(shortBal).to.eq(amount)
-
-      // close from wallet
-      let prevBaseBal = await baseToken.balanceOf(Alice)
-      let venueAddress: string = venue.address
-      let params: any = venue.interface.encodeFunctionData('close', [oid, amount, receiver])
-      await expect(house.execute(1, venueAddress, params)).to.emit(house, 'Executed').withArgs(signer.address, venueAddress)
-      let postBaseBal = await baseToken.balanceOf(Alice)
-      let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
-      expect(baseBalDiff).to.eq(amount)
-    })
+    // close from wallet
+    let prevBaseBal = await baseToken.balanceOf(Alice)
+    let params: any = venue.interface.encodeFunctionData('close', [oid, amount, receiver])
+    await expect(house.execute(1, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+    let postBaseBal = await baseToken.balanceOf(Alice)
+    let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
+    expect(baseBalDiff).to.eq(amount)
   })
 })
