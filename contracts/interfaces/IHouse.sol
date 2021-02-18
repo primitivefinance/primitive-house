@@ -46,6 +46,12 @@ interface IHouse {
         bool fromInternal
     ) external returns (bool);
 
+    function borrowOptions(
+        bytes32 oid,
+        uint256 amount,
+        address[] memory receivers
+      ) external returns (uint256);
+
     function takeTokensFromUser(address token, uint256 quantity) external;
 
     // ==== View ====

@@ -50,6 +50,20 @@ contract BasicVenue is VaultVenue {
         _wrapOptionForHouse(oid, amount);
         return true;
     }
+// let a venue borrow options. TEST FUNCTION ONLY DO NOT DEPLOY
+// todo make specific VenueTest.sol with test utility fns
+    function borrowOptionTest(
+      bytes32 oid,
+      uint256 amount
+    ) public returns (bool) {
+      // Receivers are this address
+      address[] memory receivers = new address[](2);
+      receivers[0] = address(this);
+      receivers[1] = address(this);
+
+      _house.borrowOptions(oid, amount, receivers);
+      return true;
+    }
 
     /**
      * @notice  Exercises the `oid` option using the balance of the long stored in this contract.
