@@ -13,15 +13,14 @@ import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
 const { AddressZero } = ethers.constants
 
-describe("House integration tests", function () {
-
+describe('House integration tests', function () {
   let signers: SignerWithAddress[]
   let weth: Contract
   let house: Contract
   let signer: SignerWithAddress
   let Alice: string
   let tokens: Contract[], comp: Contract, dai: Contract, MultiToken: Contract
-  let venue: Contract
+  let venue: Contract, optionVenue: Contract
   let manager: Contract
   let core: Contract
   let baseToken, quoteToken, strikePrice, expiry, isCall
@@ -63,11 +62,16 @@ describe("House integration tests", function () {
     let params: any = venue.interface.encodeFunctionData('mintOptionsThenWrap', [oid, amount, receiver])
     return house.execute(0, venue.address, params)
   }
-// todo, util function to simply mint options for user on demand
+  // todo, util function to simply mint options for user on demand
   const venueSplitDeposit = (venue: Contract, receiver: string, oid: string) => {
     let amount: BigNumber = parseEther('1')
     let params: any = venue.interface.encodeFunctionData('splitOptionsAndDeposit', [oid, amount, [receiver, receiver]])
     return house.execute(1, venue.address, params)
+  }
+
+  const venueBatchMintThenCollateralize = (venue: Contract, oids: string[], amounts: BigNumberish[]) => {
+    let params: any = venue.interface.encodeFunctionData('batchMintThenCollateralize', [oids, amounts])
+    return house.execute(0, venue.address, params)
   }
 
   const quoteTokenDeposit = (venue: Contract, receiver: string, quoteToken: Contract) => {
@@ -88,7 +92,7 @@ describe("House integration tests", function () {
     return house.execute(1, venue.address, params)
   }
 
-  beforeEach(async function() {
+  beforeEach(async function () {
     // 1. get signers
     signers = await ethers.getSigners()
     signer = signers[0]
@@ -110,8 +114,9 @@ describe("House integration tests", function () {
     // 4. deploy house
     house = await deploy('House', { from: signers[0], args: [AddressZero] })
 
-    // 5. deploy venue
+    // 5. deploy venues
     venue = await deploy('BasicVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address] })
+    optionVenue = await deploy('OptionVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address] })
 
     // 6. deploy core with the house as the manager
     core = await deploy('Core', { from: signers[0], args: [house.address] })
@@ -122,7 +127,6 @@ describe("House integration tests", function () {
     // 8. get the oid for the created options
     oid = await core.getOIdFromParameters(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
     false_oid = await core.getOIdFromParameters(Alice, Alice, strikePrice, expiry, isCall)
-
 
     // 9. get the tokens for the oid
     let [longAddr, shortAddr] = await core.getTokenData(oid)
@@ -166,7 +170,6 @@ describe("House integration tests", function () {
   })
 
   describe('Deposit', async () => {
-
     it('Caller can use the house to deposit an option in a venue', async () => {
       let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('1'), Alice])
       await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
@@ -179,18 +182,16 @@ describe("House integration tests", function () {
 
     it('Caller CANNOT use the house to deposit a non-existent option in a venue', async () => {
       let params: any = venue.interface.encodeFunctionData('deposit', [false_oid, parseEther('1'), Alice])
-      await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
+      await expect(house.execute(0, venue.address, params)).to.be.revertedWith('EXECUTION_FAIL')
     })
 
     it('Caller CANNOT use the house to deposit an option in a venue if they do not have a sufficient balance', async () => {
       let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('10000000000000000'), Alice])
-      await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
+      await expect(house.execute(0, venue.address, params)).to.be.revertedWith('EXECUTION_FAIL')
     })
-
   })
 
   describe('Withdraw', async () => {
-
     it('Caller can use the house to withdraw an option from a venue', async () => {
       await venueDeposit(venue, Alice, oid)
       let params: any = venue.interface.encodeFunctionData('withdraw', [oid, parseEther('1'), [Alice, Alice]])
@@ -200,14 +201,13 @@ describe("House integration tests", function () {
     it('Caller CANNOT use the house to withdraw an option from a venue on behalf of another account', async () => {
       await venueDeposit(venue, Alice, oid)
       let params: any = venue.interface.encodeFunctionData('withdraw', [oid, parseEther('1'), [Alice, Alice]])
-      await expect(house.connect(signers[2]).execute(1, venue.address, params)).to.be.revertedWith("House: NOT_DEPOSITOR")
+      await expect(house.connect(signers[2]).execute(1, venue.address, params)).to.be.revertedWith('House: NOT_DEPOSITOR')
     })
 
     it('Caller CANNOT use the house to withdraw an option from a venue if they have no options deposited', async () => {
       let params: any = venue.interface.encodeFunctionData('withdraw', [oid, parseEther('1'), [Alice, Alice]])
-      await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
+      await expect(house.execute(0, venue.address, params)).to.be.revertedWith('EXECUTION_FAIL')
     })
-
   })
 
   it('Caller can use a valid venue to borrow options without collateral', async () => {
@@ -351,5 +351,28 @@ describe("House integration tests", function () {
     let postBaseBal = await baseToken.balanceOf(Alice)
     let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
     expect(baseBalDiff).to.eq(amount)
+  })
+
+  describe('BatchMintThenCollateralize', async () => {
+    it('Caller can mint multiple options and deposit all of them into the House.', async () => {
+      let oids: string[] = [oid, oid]
+      let amounts: BigNumberish[] = [parseEther('1'), parseEther('1')]
+      let params: any = optionVenue.interface.encodeFunctionData('batchMintThenCollateralize', [oids, amounts])
+      await expect(house.execute(0, optionVenue.address, params))
+        .to.emit(house, 'Executed')
+        .withArgs(Alice, optionVenue.address)
+      log(`The caller has ${formatEther(await house.getDebtOf(1, baseToken.address))}`)
+    })
+
+    it('Caller can mint multiple options and deposit all of them into the House, then borrow against them.', async () => {
+      let oids: string[] = [oid, oid]
+      let amounts: BigNumberish[] = [parseEther('1'), parseEther('1')]
+      await venueBatchMintThenCollateralize(optionVenue, oids, amounts)
+
+      let params: any = optionVenue.interface.encodeFunctionData('batchMintThenCollateralize', [oids, amounts])
+      await expect(house.execute(0, optionVenue.address, params))
+        .to.emit(house, 'Executed')
+        .withArgs(Alice, optionVenue.address)
+    })
   })
 })
