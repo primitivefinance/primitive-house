@@ -26,6 +26,7 @@ describe("House integration tests", function () {
   let core: Contract
   let baseToken, quoteToken, strikePrice, expiry, isCall
   let oid: string
+  let false_oid: string
   let longToken: Contract, shortToken: Contract
 
   const deadline = Math.floor(Date.now() / 1000) + 60 * 20
@@ -120,6 +121,8 @@ describe("House integration tests", function () {
 
     // 8. get the oid for the created options
     oid = await core.getOIdFromParameters(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
+    false_oid = await core.getOIdFromParameters(Alice, Alice, strikePrice, expiry, isCall)
+
 
     // 9. get the tokens for the oid
     let [longAddr, shortAddr] = await core.getTokenData(oid)
@@ -157,14 +160,19 @@ describe("House integration tests", function () {
   it('weth()', async () => {
     expect(await venue.getWeth()).to.eq(weth.address)
   })
-  
+
   it('house()', async () => {
     expect(await venue.getHouse()).to.eq(house.address)
   })
 
-  it('Caller can deposit an option in the venue', async () => {
+  it('Caller can deposit a valid option in the venue', async () => {
     let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('1'), Alice])
     await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+  })
+
+  it('Caller cannot deposit an invalid option in the venue', async () => {
+    let params: any = venue.interface.encodeFunctionData('deposit', [false_oid, parseEther('1'), Alice])
+    await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
   })
 
   it('Depositor can use venue to mint long and short options, wrap them, and deposit them into the house', async () => {
