@@ -325,7 +325,7 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         bytes32 oid,
         uint256 requestAmt,
         address[] memory receivers
-    ) public isExec returns (uint256) {
+    ) external isExec returns (uint256) {
         // Get the account that is being updated
         Account storage acc = _accounts[getExecutingNonce()];
         // Update the acc delta

@@ -165,14 +165,54 @@ describe("House integration tests", function () {
     expect(await venue.getHouse()).to.eq(house.address)
   })
 
-  it('Caller can deposit a valid option in the venue', async () => {
-    let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('1'), Alice])
-    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+  describe('Deposit', async () => {
+
+    it('Caller can use the house to deposit an option in a venue', async () => {
+      let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('1'), Alice])
+      await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+    })
+
+    it('Caller can use the house to deposit an option in a venue on behalf of another contract or account', async () => {
+      let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('1'), house.address])
+      await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+    })
+
+    it('Caller CANNOT use the house to deposit a non-existent option in a venue', async () => {
+      let params: any = venue.interface.encodeFunctionData('deposit', [false_oid, parseEther('1'), Alice])
+      await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
+    })
+
+    it('Caller CANNOT use the house to deposit an option in a venue if they do not have a sufficient balance', async () => {
+      let params: any = venue.interface.encodeFunctionData('deposit', [oid, parseEther('10000000000000000'), Alice])
+      await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
+    })
+
   })
 
-  it('Caller cannot deposit an invalid option in the venue', async () => {
-    let params: any = venue.interface.encodeFunctionData('deposit', [false_oid, parseEther('1'), Alice])
-    await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
+  describe('Withdraw', async () => {
+
+    it('Caller can use the house to withdraw an option from a venue', async () => {
+      await venueDeposit(venue, Alice, oid)
+      let params: any = venue.interface.encodeFunctionData('withdraw', [oid, parseEther('1'), [Alice, Alice]])
+      await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+    })
+
+    it('Caller CANNOT use the house to withdraw an option from a venue on behalf of another account', async () => {
+      await venueDeposit(venue, Alice, oid)
+      let params: any = venue.interface.encodeFunctionData('withdraw', [oid, parseEther('1'), [Alice, Alice]])
+      await expect(house.connect(signers[2]).execute(1, venue.address, params)).to.be.revertedWith("House: NOT_DEPOSITOR")
+    })
+
+    it('Caller CANNOT use the house to withdraw an option from a venue if they have no options deposited', async () => {
+      let params: any = venue.interface.encodeFunctionData('withdraw', [oid, parseEther('1'), [Alice, Alice]])
+      await expect(house.execute(0, venue.address, params)).to.be.revertedWith("EXECUTION_FAIL")
+    })
+
+  })
+
+  it('Caller can use a valid venue to borrow options without collateral', async () => {
+    let params: any = venue.interface.encodeFunctionData('borrowOptionTest', [oid, parseEther('1')])
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
   })
 
   it('Depositor can use venue to mint long and short options, wrap them, and deposit them into the house', async () => {
