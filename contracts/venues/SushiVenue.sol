@@ -184,7 +184,57 @@ contract SushiVenue is VaultVenue {
         _closeOptions(oid, amount, receiver, false);
     }
 
+    // ===== Liquidity ======
+    // mint mintAmount of option oid
+    // deposit at least addAmountMin and at most addAmountMax of underlying plus
+    // mintAmount redeem tokens in the liquidity pool, send LP tokens to House
+    // send spare underlying back to original caller
+    // deadline the timestamp to expire a pending transaction
+    function addRedeemLiquidityWithUnderlying(
+        bytes32 oid,
+        uint256 mintAmount,
+        uint256 addAmountMax,
+        uint256 addAmountMin,
+        uint256 deadline
+    ) external {
+      // house will get long tokens, while short tokens are minted to this contract before being added to liquidity pool
+      address[] memory receivers = new address[](2);
+      receivers[0] = address(_house);
+      receivers[1] = address(this);
+
+      console.log("minting options");
+      // Call the _house to mint options, pulls base tokens to the _house from the executing caller
+      _mintOptions(oid, mintAmount, receivers, false);
+      (, address redeem) = _house.getOptionTokens(oid);
+      (, address underlying, , ,) = _house.getParameters(oid);
+      // call the house to pull addAmountMax of underlying token into this contract
+      _house.takeTokensFromUser(underlying, addAmountMax);
+      // Uniswap V2 Pair must be approved to pull tokens from this contract, this should probably have its own function
+      // that can be called for any valid pair rather than being repeated every time this is called
+
+      // add liquidity to uniswap using UniswapV2Router02
+      // add exactly mintAmount of redeem tokens,
+      // and between addAmountMin and addAmountMax of underlying
+      // to pool by deadline
+      // mint LP tokens to the house
+      router.addLiquidity(
+                redeem,
+                underlying,
+                mintAmount,
+                addAmountMax,
+                addAmountMin,
+                mintAmount,
+                address(_house),
+                deadline
+            );
+
+      // emit event?
+
+    }
+
     // ===== Flash Loans =====
+
+
 
     function _flashSwap(
         IUniswapV2Pair pair,
