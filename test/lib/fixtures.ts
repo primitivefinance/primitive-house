@@ -3,7 +3,7 @@ import { Wallet, Contract, BigNumber } from 'ethers'
 import { deployContract, link } from 'ethereum-waffle'
 import { formatEther, parseEther } from 'ethers/lib/utils'
 import constants from './constants'
-import batchApproval from './batchApproval'
+//import batchApproval from './batchApproval'
 const { OPTION_TEMPLATE_LIB, REDEEM_TEMPLATE_LIB } = constants.LIBRARIES
 
 // TODO get rid of the old primitive imports we won't be using
@@ -19,14 +19,14 @@ import RedeemFactory from '@primitivefi/contracts/artifacts/RedeemFactory.json'
 import OptionTemplateLib from '@primitivefi/contracts/artifacts/OptionTemplateLib.json'
 import RedeemTemplateLib from '@primitivefi/contracts/artifacts/RedeemTemplateLib.json'
 
-// TODO import house and venues from build
 import House from '../../build/contracts/House.sol/House.json'
+import Core from '../../build/contracts/Core.sol/Core.json'
 
 import UniswapV2Factory from '@uniswap/v2-core/build/UniswapV2Factory.json'
 import UniswapV2Router02 from '@uniswap/v2-periphery/build/UniswapV2Router02.json'
 import { connect } from 'http2'
 
-const overrides = { gasLimit: 12500000 }
+const overrides = { gasLimit: 9500000 }
 
 interface WethFixture {
   weth: Contract
@@ -36,13 +36,13 @@ export async function wethFixture([wallet]: Wallet[], provider): Promise<WethFix
   const weth = await deployContract(wallet, Weth, [], overrides)
   return { weth }
 }
-// TODO confirm objects to return for house fixure
-interface HouseFixture {
+
+export interface HouseFixture {
   house: Contract
   core: Contract
 }
 
-export async function houseFixture([wallet]: Wallet[], provider): Promise<RegistryFixture> {
+export async function houseFixture([wallet]: Wallet[], provider): Promise<HouseFixture> {
   // Deploy the house contract, with core = 0 uninitialized
   const house = await deployContract(wallet, House, [constants.ADDRESSES.ZERO_ADDRESS], overrides)
   // Deploy the option core with house as manager
@@ -67,7 +67,7 @@ export async function uniswapFixture([wallet]: Wallet[], provider): Promise<Unis
   const uniswapRouter = await deployContract(wallet, UniswapV2Router02, [uniswapFactory.address, weth.address], overrides)
   return { uniswapRouter, uniswapFactory, weth }
 }
-
+/*
 interface TokenFixture {
   tokenA: Contract
   tokenB: Contract
@@ -78,15 +78,6 @@ export async function tokenFixture([wallet]: Wallet[], provider): Promise<TokenF
   const tokenA = await deployContract(wallet, TestERC20, ['COMP', 'COMP', amount])
   const tokenB = await deployContract(wallet, TestERC20, ['DAI', 'DAI', amount])
   return { tokenA, tokenB }
-}
-
-interface DaiFixture {
-  dai: Contract
-}
-
-export async function daiFixture([wallet]: Wallet[], provider): Promise<DaiFixture> {
-  const dai = await deployContract(wallet, Dai, [await wallet.getChainId()])
-  return { dai }
 }
 
 export interface OptionParameters {
@@ -121,10 +112,11 @@ export async function deployOption(wallet: Wallet, registry: Contract, params: O
   const redeemToken = new ethers.Contract(await optionToken.redeemToken(), Redeem.abi, wallet)
   return { optionToken, redeemToken }
 }
-
+*/
 /**
  * @notice  Gets a call option with a $100 strike price.
  */
+ /*
 export async function optionFixture([wallet]: Wallet[], provider): Promise<OptionFixture> {
   const { registry } = await registryFixture([wallet], provider)
   const { tokenA, tokenB } = await tokenFixture([wallet], provider)
@@ -286,4 +278,4 @@ export async function primitiveV1([wallet]: Wallet[], provider): Promise<Primiti
     dai,
     connectorTest,
   }
-}
+} */

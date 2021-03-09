@@ -12,8 +12,13 @@ import {} from './lib/protocol'
 import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
 const { AddressZero } = ethers.constants
+import { houseFixture, HouseFixture, uniswapFixture } from './lib/fixtures'
 
 describe("House integration tests", function () {
+  let wallet, wallet1
+  ;[wallet, wallet1] = waffle.provider.getWallets()
+  const loadFixture = waffle.createFixtureLoader([wallet], waffle.provider)
+  let _houseFixture: HouseFixture
 
   let signers: SignerWithAddress[]
   let weth: Contract
@@ -89,6 +94,8 @@ describe("House integration tests", function () {
   }
 
   beforeEach(async function() {
+    let _houseFixture = await loadFixture(houseFixture)
+
     // 1. get signers
     signers = await ethers.getSigners()
     signer = signers[0]
@@ -108,13 +115,13 @@ describe("House integration tests", function () {
     isCall = true
 
     // 4. deploy house
-    house = await deploy('House', { from: signers[0], args: [AddressZero] })
+    house = _houseFixture.house
 
     // 5. deploy venue
     venue = await deploy('BasicVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address] })
 
     // 6. deploy core with the house as the manager
-    core = await deploy('Core', { from: signers[0], args: [house.address] })
+    core = _houseFixture.core
 
     // 7. create options
     await core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
