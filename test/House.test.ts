@@ -106,11 +106,11 @@ describe("House integration tests", function () {
     expiry = 1615190111
     isCall = true
 
-    // 4. deploy house
+    // 4. set house var for convenience
     house = fixture.house.house
 
     // 5. deploy venue
-    venue = await deploy('BasicVenue', { from: signers[0], args: [fixture.uniswap.weth.address, house.address, fixture.multiToken.address] })
+    venue = fixture.venue
 
     // 7. create options
     await fixture.house.core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)

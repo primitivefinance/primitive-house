@@ -4,6 +4,7 @@ import { deployContract, link } from 'ethereum-waffle'
 import { formatEther, parseEther } from 'ethers/lib/utils'
 import constants from './constants'
 import MultiToken from '../../build/contracts/MultiToken.sol/MultiToken.json'
+import BasicVenue from '../../build/contracts/venues/BasicVenue.sol/BasicVenue.json'
 
 
 //import batchApproval from './batchApproval'
@@ -77,6 +78,7 @@ export interface HouseTestFixture {
   uniswap: UniswapFixture
   tokens: Contract[]
   multiToken: Contract
+  venue: Contract
 }
 
 export async function houseTestFixture([wallet]: Wallet[], provider): Promise<HouseTestFixture> {
@@ -84,12 +86,14 @@ export async function houseTestFixture([wallet]: Wallet[], provider): Promise<Ho
   let house = await houseFixture([wallet], provider)
   let tokens: Contract[] = await deployTokens(wallet, 2, ['tokenA', 'tokenB'])
   let multiToken: Contract = await deployContract(wallet, MultiToken, [], overrides)
+  let venue = await deployContract(wallet, BasicVenue, [uniswap.weth.address, house.house.address, multiToken.address], overrides)
 
   return {
     house,
     uniswap,
     tokens,
-    multiToken
+    multiToken,
+    venue
   }
 }
 /*
