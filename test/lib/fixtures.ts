@@ -55,7 +55,7 @@ export async function houseFixture([wallet]: Wallet[], provider): Promise<HouseF
   }
 }
 
-interface UniswapFixture {
+export interface UniswapFixture {
   uniswapRouter: Contract
   uniswapFactory: Contract
   weth: Contract

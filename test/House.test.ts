@@ -12,13 +12,14 @@ import {} from './lib/protocol'
 import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
 const { AddressZero } = ethers.constants
-import { houseFixture, HouseFixture, uniswapFixture } from './lib/fixtures'
+import { houseFixture, HouseFixture, uniswapFixture, UniswapFixture } from './lib/fixtures'
 
 describe("House integration tests", function () {
   let wallet, wallet1
   ;[wallet, wallet1] = waffle.provider.getWallets()
   const loadFixture = waffle.createFixtureLoader([wallet], waffle.provider)
   let _houseFixture: HouseFixture
+  let _uniswapFixture: UniswapFixture
 
   let signers: SignerWithAddress[]
   let weth: Contract
@@ -94,7 +95,8 @@ describe("House integration tests", function () {
   }
 
   beforeEach(async function() {
-    let _houseFixture = await loadFixture(houseFixture)
+    _houseFixture = await loadFixture(houseFixture)
+    _uniswapFixture = await loadFixture(uniswapFixture)
 
     // 1. get signers
     signers = await ethers.getSigners()
@@ -102,7 +104,7 @@ describe("House integration tests", function () {
     Alice = signer.address
 
     // 2. get weth, erc-20 tokens, and wrapped tokens
-    weth = await deployWeth(signer)
+    weth = _uniswapFixture.weth
     tokens = await deployTokens(signer, 2, ['comp', 'dai'])
     ;[comp, dai] = tokens
     MultiToken = await deployMultiToken(signer)
