@@ -3,6 +3,9 @@ import { Wallet, Contract, BigNumber } from 'ethers'
 import { deployContract, link } from 'ethereum-waffle'
 import { formatEther, parseEther } from 'ethers/lib/utils'
 import constants from './constants'
+import MultiToken from '../../build/contracts/MultiToken.sol/MultiToken.json'
+
+
 //import batchApproval from './batchApproval'
 const { OPTION_TEMPLATE_LIB, REDEEM_TEMPLATE_LIB } = constants.LIBRARIES
 import { deployTokens, deployWeth, batchApproval, tokenFromAddress } from './erc20'
@@ -73,16 +76,20 @@ export interface HouseTestFixture {
   house: HouseFixture
   uniswap: UniswapFixture
   tokens: Contract[]
+  multiToken: Contract
 }
 
 export async function houseTestFixture([wallet]: Wallet[], provider): Promise<HouseTestFixture> {
   let uniswap = await uniswapFixture([wallet], provider)
   let house = await houseFixture([wallet], provider)
   let tokens: Contract[] = await deployTokens(wallet, 2, ['tokenA', 'tokenB'])
+  let multiToken: Contract = await deployContract(wallet, MultiToken, [], overrides)
+
   return {
     house,
     uniswap,
-    tokens
+    tokens,
+    multiToken
   }
 }
 /*

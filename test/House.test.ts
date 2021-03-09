@@ -7,7 +7,6 @@ import { parseEther, formatEther } from 'ethers/lib/utils'
 import { ethers, waffle } from 'hardhat'
 import { deploy } from '../scripts/deploy'
 import { deployTokens, deployWeth, batchApproval, tokenFromAddress } from './lib/erc20'
-import { deployMultiToken } from './lib/MultiToken'
 import {} from './lib/protocol'
 import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
@@ -23,7 +22,6 @@ describe("House integration tests", function () {
   let house: Contract
   let signer: SignerWithAddress
   let Alice: string
-  let MultiToken: Contract
   let venue: Contract
   let manager: Contract
   let baseToken, quoteToken, strikePrice, expiry, isCall
@@ -100,7 +98,6 @@ describe("House integration tests", function () {
     let comp, dai
     // 2. get weth, erc-20 tokens, and wrapped tokens
     ;[comp, dai] = fixture.tokens
-    MultiToken = await deployMultiToken(signer)
 
     // 3. select option params
     baseToken = comp
@@ -113,7 +110,7 @@ describe("House integration tests", function () {
     house = fixture.house.house
 
     // 5. deploy venue
-    venue = await deploy('BasicVenue', { from: signers[0], args: [fixture.uniswap.weth.address, house.address, MultiToken.address] })
+    venue = await deploy('BasicVenue', { from: signers[0], args: [fixture.uniswap.weth.address, house.address, fixture.multiToken.address] })
 
     // 7. create options
     await fixture.house.core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
@@ -148,7 +145,7 @@ describe("House integration tests", function () {
   afterEach(async function () {
     let contractNames: string[] = ['House', 'Venue']
     let contracts = [house, venue]
-    let addresses = [signer.address, MultiToken.address]
+    let addresses = [signer.address, fixture.multiToken.address]
     let addressNamesArray: string[] = ['Alice', 'MultiToken']
     await generateReport(contractNames, contracts, fixture.tokens, addresses, addressNamesArray)
   })
