@@ -184,6 +184,11 @@ contract SushiVenue is VaultVenue {
         _closeOptions(oid, amount, receiver, false);
     }
 
+    // this contract does not hold funds so approving other contracts shouldn't be a problem
+    function approveToPull(address token, address spender) external {
+      IERC20(token).safeApprove(spender, uint256(-1));
+    }
+
     // ===== Liquidity ======
     // mint mintAmount of option oid
     // deposit at least addAmountMin and at most addAmountMax of underlying plus
@@ -209,10 +214,9 @@ contract SushiVenue is VaultVenue {
       (, address underlying, , ,) = _house.getParameters(oid);
       // call the house to pull addAmountMax of underlying token into this contract
       _house.takeTokensFromUser(underlying, addAmountMax);
-      // Uniswap V2 Pair must be approved to pull tokens from this contract, this should probably have its own function
-      // that can be called for any valid pair rather than being repeated every time this is called
 
       // add liquidity to uniswap using UniswapV2Router02
+      // will revert if this contract has approved the target pool yet for underlying
       // add exactly mintAmount of redeem tokens,
       // and between addAmountMin and addAmountMax of underlying
       // to pool by deadline
