@@ -157,6 +157,11 @@ describe("House integration tests using sushi venue", function () {
     await baseToken.approve(house.address, ethers.constants.MaxUint256)
     // approve base tokens to be pulled from caller
     await quoteToken.approve(house.address, ethers.constants.MaxUint256)
+
+    // approve uniswap router to pull tokens from venue
+    await venue.checkApproved(baseToken.address, uniswapRouter.address)
+    await venue.checkApproved(longAddr, uniswapRouter.address)
+    await venue.checkApproved(shortAddr, uniswapRouter.address)
   })
 
   afterEach(async function () {
