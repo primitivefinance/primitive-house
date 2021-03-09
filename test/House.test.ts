@@ -20,16 +20,13 @@ describe("House integration tests", function () {
   const loadFixture = waffle.createFixtureLoader([wallet], waffle.provider)
   let _houseFixture: HouseFixture
   let _uniswapFixture: UniswapFixture
-
   let signers: SignerWithAddress[]
-  let weth: Contract
   let house: Contract
   let signer: SignerWithAddress
   let Alice: string
   let tokens: Contract[], comp: Contract, dai: Contract, MultiToken: Contract
   let venue: Contract
   let manager: Contract
-  let core: Contract
   let baseToken, quoteToken, strikePrice, expiry, isCall
   let oid: string
   let false_oid: string
@@ -104,7 +101,6 @@ describe("House integration tests", function () {
     Alice = signer.address
 
     // 2. get weth, erc-20 tokens, and wrapped tokens
-    weth = _uniswapFixture.weth
     tokens = await deployTokens(signer, 2, ['comp', 'dai'])
     ;[comp, dai] = tokens
     MultiToken = await deployMultiToken(signer)
@@ -120,21 +116,18 @@ describe("House integration tests", function () {
     house = _houseFixture.house
 
     // 5. deploy venue
-    venue = await deploy('BasicVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address] })
-
-    // 6. deploy core with the house as the manager
-    core = _houseFixture.core
+    venue = await deploy('BasicVenue', { from: signers[0], args: [_uniswapFixture.weth.address, house.address, MultiToken.address] })
 
     // 7. create options
-    await core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
+    await _houseFixture.core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
 
     // 8. get the oid for the created options
-    oid = await core.getOIdFromParameters(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
-    false_oid = await core.getOIdFromParameters(Alice, Alice, strikePrice, expiry, isCall)
+    oid = await _houseFixture.core.getOIdFromParameters(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
+    false_oid = await _houseFixture.core.getOIdFromParameters(Alice, Alice, strikePrice, expiry, isCall)
 
 
     // 9. get the tokens for the oid
-    let [longAddr, shortAddr] = await core.getTokenData(oid)
+    let [longAddr, shortAddr] = await _houseFixture.core.getTokenData(oid)
 
     // 10. get erc20 instances for the tokenization so we can query balances
     longToken = tokenFromAddress(longAddr, signers[0])
@@ -164,7 +157,7 @@ describe("House integration tests", function () {
   })
 
   it('weth()', async () => {
-    expect(await venue.getWeth()).to.eq(weth.address)
+    expect(await venue.getWeth()).to.eq(_uniswapFixture.weth.address)
   })
 
   it('house()', async () => {
