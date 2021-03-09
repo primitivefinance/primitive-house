@@ -5,6 +5,7 @@ import { formatEther, parseEther } from 'ethers/lib/utils'
 import constants from './constants'
 //import batchApproval from './batchApproval'
 const { OPTION_TEMPLATE_LIB, REDEEM_TEMPLATE_LIB } = constants.LIBRARIES
+import { deployTokens, deployWeth, batchApproval, tokenFromAddress } from './erc20'
 
 // TODO get rid of the old primitive imports we won't be using
 import Weth from '@primitivefi/contracts/artifacts/WETH9.json'
@@ -66,6 +67,23 @@ export async function uniswapFixture([wallet]: Wallet[], provider): Promise<Unis
   const uniswapFactory = await deployContract(wallet, UniswapV2Factory, [wallet.address], overrides)
   const uniswapRouter = await deployContract(wallet, UniswapV2Router02, [uniswapFactory.address, weth.address], overrides)
   return { uniswapRouter, uniswapFactory, weth }
+}
+
+export interface HouseTestFixture {
+  house: HouseFixture
+  uniswap: UniswapFixture
+  tokens: Contract[]
+}
+
+export async function houseTestFixture([wallet]: Wallet[], provider): Promise<HouseTestFixture> {
+  let uniswap = await uniswapFixture([wallet], provider)
+  let house = await houseFixture([wallet], provider)
+  let tokens: Contract[] = await deployTokens(wallet, 2, ['tokenA', 'tokenB'])
+  return {
+    house,
+    uniswap,
+    tokens
+  }
 }
 /*
 interface TokenFixture {

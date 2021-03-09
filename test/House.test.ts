@@ -12,19 +12,18 @@ import {} from './lib/protocol'
 import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
 const { AddressZero } = ethers.constants
-import { houseFixture, HouseFixture, uniswapFixture, UniswapFixture } from './lib/fixtures'
+import { houseFixture, HouseFixture, uniswapFixture, UniswapFixture, houseTestFixture, HouseTestFixture } from './lib/fixtures'
 
 describe("House integration tests", function () {
   let wallet, wallet1
   ;[wallet, wallet1] = waffle.provider.getWallets()
   const loadFixture = waffle.createFixtureLoader([wallet], waffle.provider)
-  let _houseFixture: HouseFixture
-  let _uniswapFixture: UniswapFixture
+  let fixture: HouseTestFixture
   let signers: SignerWithAddress[]
   let house: Contract
   let signer: SignerWithAddress
   let Alice: string
-  let tokens: Contract[], comp: Contract, dai: Contract, MultiToken: Contract
+  let MultiToken: Contract
   let venue: Contract
   let manager: Contract
   let baseToken, quoteToken, strikePrice, expiry, isCall
@@ -35,7 +34,7 @@ describe("House integration tests", function () {
   const deadline = Math.floor(Date.now() / 1000) + 60 * 20
 
   const getTokenAddresses = () => {
-    const array = tokens.map((token) => {
+    const array = fixture.tokens.map((token) => {
       return token.address
     })
     return array
@@ -43,7 +42,7 @@ describe("House integration tests", function () {
 
   const getAmounts = () => {
     let ONE: BigNumber = parseEther('1')
-    const array = tokens.map(() => {
+    const array = fixture.tokens.map(() => {
       return ONE
     })
     return array
@@ -92,17 +91,15 @@ describe("House integration tests", function () {
   }
 
   beforeEach(async function() {
-    _houseFixture = await loadFixture(houseFixture)
-    _uniswapFixture = await loadFixture(uniswapFixture)
+    fixture = await loadFixture(houseTestFixture)
 
     // 1. get signers
     signers = await ethers.getSigners()
     signer = signers[0]
     Alice = signer.address
-
+    let comp, dai
     // 2. get weth, erc-20 tokens, and wrapped tokens
-    tokens = await deployTokens(signer, 2, ['comp', 'dai'])
-    ;[comp, dai] = tokens
+    ;[comp, dai] = fixture.tokens
     MultiToken = await deployMultiToken(signer)
 
     // 3. select option params
@@ -113,21 +110,21 @@ describe("House integration tests", function () {
     isCall = true
 
     // 4. deploy house
-    house = _houseFixture.house
+    house = fixture.house.house
 
     // 5. deploy venue
-    venue = await deploy('BasicVenue', { from: signers[0], args: [_uniswapFixture.weth.address, house.address, MultiToken.address] })
+    venue = await deploy('BasicVenue', { from: signers[0], args: [fixture.uniswap.weth.address, house.address, MultiToken.address] })
 
     // 7. create options
-    await _houseFixture.core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
+    await fixture.house.core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
 
     // 8. get the oid for the created options
-    oid = await _houseFixture.core.getOIdFromParameters(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
-    false_oid = await _houseFixture.core.getOIdFromParameters(Alice, Alice, strikePrice, expiry, isCall)
+    oid = await fixture.house.core.getOIdFromParameters(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
+    false_oid = await fixture.house.core.getOIdFromParameters(Alice, Alice, strikePrice, expiry, isCall)
 
 
     // 9. get the tokens for the oid
-    let [longAddr, shortAddr] = await _houseFixture.core.getTokenData(oid)
+    let [longAddr, shortAddr] = await fixture.house.core.getTokenData(oid)
 
     // 10. get erc20 instances for the tokenization so we can query balances
     longToken = tokenFromAddress(longAddr, signers[0])
@@ -137,8 +134,8 @@ describe("House integration tests", function () {
     let contracts: Contract[] = [house]
     let addresses: string[] = [signer.address]
     let addressNamesArray: string[] = ['Alice']
-    tokens.push(longToken)
-    tokens.push(shortToken)
+    fixture.tokens.push(longToken)
+    fixture.tokens.push(shortToken)
     //console.log(await shortToken.symbol(), await longToken.symbol(), longToken.address == shortToken.address)
     //await generateReport(contractNames, contracts, tokens, addresses, addressNamesArray)
 
@@ -153,11 +150,11 @@ describe("House integration tests", function () {
     let contracts = [house, venue]
     let addresses = [signer.address, MultiToken.address]
     let addressNamesArray: string[] = ['Alice', 'MultiToken']
-    await generateReport(contractNames, contracts, tokens, addresses, addressNamesArray)
+    await generateReport(contractNames, contracts, fixture.tokens, addresses, addressNamesArray)
   })
 
   it('weth()', async () => {
-    expect(await venue.getWeth()).to.eq(_uniswapFixture.weth.address)
+    expect(await venue.getWeth()).to.eq(fixture.uniswap.weth.address)
   })
 
   it('house()', async () => {
