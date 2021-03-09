@@ -184,11 +184,6 @@ contract SushiVenue is VaultVenue {
         _closeOptions(oid, amount, receiver, false);
     }
 
-    // this contract does not hold funds so approving other contracts shouldn't be a problem
-    function approveToPull(address token, address spender) external {
-      IERC20(token).safeApprove(spender, uint256(-1));
-    }
-
     // ===== Liquidity ======
     // mint mintAmount of option oid
     // deposit at least addAmountMin and at most addAmountMax of underlying plus
