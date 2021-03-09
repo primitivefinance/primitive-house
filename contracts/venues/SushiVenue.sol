@@ -187,7 +187,7 @@ contract SushiVenue is VaultVenue {
     // ===== Liquidity ======
     // mint mintAmount of option oid
     // deposit at least addAmountMin and at most addAmountMax of underlying plus
-    // mintAmount redeem tokens in the liquidity pool, send LP tokens to House
+    // mintAmount redeem tokens in the liquidity pool, send LP + long tokens to House
     // send spare underlying back to original caller
     // deadline the timestamp to expire a pending transaction
     function addRedeemLiquidityWithUnderlying(
@@ -207,8 +207,10 @@ contract SushiVenue is VaultVenue {
       _mintOptions(oid, mintAmount, receivers, false);
       (, address redeem) = _house.getOptionTokens(oid);
       (, address underlying, , ,) = _house.getParameters(oid);
+      console.log("pull underlying tokens from caller");
       // call the house to pull addAmountMax of underlying token into this contract
       _house.takeTokensFromUser(underlying, addAmountMax);
+      console.log("Add liquidity to uniswap");
 
       // add liquidity to uniswap using UniswapV2Router02
       // will revert if this contract has approved the target pool yet for underlying
@@ -216,19 +218,23 @@ contract SushiVenue is VaultVenue {
       // and between addAmountMin and addAmountMax of underlying
       // to pool by deadline
       // mint LP tokens to the house
-      router.addLiquidity(
+      (, uint256 underlyingAdded, )= router.addLiquidity(
                 redeem,
                 underlying,
                 mintAmount,
                 addAmountMax,
-                addAmountMin,
                 mintAmount,
+                addAmountMin,
                 address(_house),
                 deadline
             );
 
       // emit event?
 
+      // return spare underlying to user if any (could send to house and add to balance instead?)
+      if (underlyingAdded < addAmountMax) {
+        IERC20(underlying).safeTransfer(_house.getExecutingCaller(), addAmountMax.sub(underlyingAdded));
+      }
     }
 
     // ===== Flash Loans =====
