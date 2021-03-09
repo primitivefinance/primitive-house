@@ -109,6 +109,8 @@ describe("House integration tests using sushi venue", function () {
     uniswapRouter = await waffle.deployContract(signers[0], UniswapV2Router02, [uniswapFactory.address, weth.address], {
       gasLimit: 9500000,
     })
+    await uniswapFactory.setFeeTo(Alice)
+
 
     // 3. select option params
     baseToken = comp
@@ -171,6 +173,19 @@ describe("House integration tests using sushi venue", function () {
     let addressNamesArray: string[] = ['Alice', 'MultiToken']
     await generateReport(contractNames, contracts, tokens, addresses, addressNamesArray)
   })
+
+  it('Caller can use a valid venue to add redeem liquidity with underlying', async () => {
+    let params: any = venue.interface.encodeFunctionData('addRedeemLiquidityWithUnderlying',
+      [
+        oid,
+        parseEther('1'),
+        parseEther('2'),
+        parseEther('0.5'),
+        deadline
+      ])
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+  })
+  /*
 
   it('weth()', async () => {
     expect(await venue.getWeth()).to.eq(weth.address)
@@ -367,4 +382,5 @@ describe("House integration tests using sushi venue", function () {
     let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
     expect(baseBalDiff).to.eq(amount)
   })
+  */
 })
