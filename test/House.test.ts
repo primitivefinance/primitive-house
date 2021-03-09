@@ -140,9 +140,6 @@ describe("House integration tests", function () {
     longToken = tokenFromAddress(longAddr, signers[0])
     shortToken = tokenFromAddress(shortAddr, signers[0])
 
-    // 11. set the core in the house
-    await house.setCore(core.address)
-
     let contractNames: string[] = ['House']
     let contracts: Contract[] = [house]
     let addresses: string[] = [signer.address]
