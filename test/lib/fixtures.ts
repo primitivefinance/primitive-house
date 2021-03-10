@@ -106,6 +106,8 @@ export async function houseTestFixture([wallet]: Wallet[], provider): Promise<Ho
     underlying, quoteToken, strike, expiry, isCall
   }
 
+  await house.core.createOption(underlying.address, quoteToken.address, parameters.strike, parameters.expiry, parameters.isCall)
+
   return {
     house,
     uniswap,

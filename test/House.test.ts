@@ -105,9 +105,6 @@ describe("House integration tests", function () {
     // 5. deploy venue
     venue = fixture.venue
 
-    // 7. create options TODO do the creation in fixture
-    await fixture.house.core.createOption(baseToken.address, quoteToken.address, fixture.parameters.strike, fixture.parameters.expiry, fixture.parameters.isCall)
-
     // 8. get the oid for the created options
     oid = await fixture.house.core.getOIdFromParameters(baseToken.address, quoteToken.address, fixture.parameters.strike, fixture.parameters.expiry, fixture.parameters.isCall)
     false_oid = await fixture.house.core.getOIdFromParameters(Alice, Alice, fixture.parameters.strike, fixture.parameters.expiry, fixture.parameters.isCall)
