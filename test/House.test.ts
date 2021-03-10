@@ -24,7 +24,7 @@ describe("House integration tests", function () {
   let Alice: string
   let venue: Contract
   let manager: Contract
-  let baseToken, quoteToken, strikePrice, expiry, isCall
+  let baseToken, quoteToken
   let oid: string
   let false_oid: string
   let longToken: Contract, shortToken: Contract
@@ -75,7 +75,7 @@ describe("House integration tests", function () {
     // deposit quote tokens to balance
     let depositParams: any = venue.interface.encodeFunctionData('depositToken', [
       quoteToken.address,
-      amount.mul(strikePrice).div(parseEther('1')),
+      amount.mul(fixture.parameters.strike).div(parseEther('1')),
       receiver,
     ])
     return house.execute(1, venue.address, depositParams)
@@ -97,14 +97,7 @@ describe("House integration tests", function () {
     Alice = signer.address
     let comp, dai
     // 2. get weth, erc-20 tokens, and wrapped tokens
-    ;[comp, dai] = fixture.tokens
-
-    // 3. select option params
-    baseToken = comp
-    quoteToken = dai
-    strikePrice = parseEther('1000')
-    expiry = 1615190111
-    isCall = true
+    ;[baseToken, quoteToken] = fixture.tokens
 
     // 4. set house var for convenience
     house = fixture.house.house
@@ -112,12 +105,12 @@ describe("House integration tests", function () {
     // 5. deploy venue
     venue = fixture.venue
 
-    // 7. create options
-    await fixture.house.core.createOption(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
+    // 7. create options TODO do the creation in fixture
+    await fixture.house.core.createOption(baseToken.address, quoteToken.address, fixture.parameters.strike, fixture.parameters.expiry, fixture.parameters.isCall)
 
     // 8. get the oid for the created options
-    oid = await fixture.house.core.getOIdFromParameters(baseToken.address, quoteToken.address, strikePrice, expiry, isCall)
-    false_oid = await fixture.house.core.getOIdFromParameters(Alice, Alice, strikePrice, expiry, isCall)
+    oid = await fixture.house.core.getOIdFromParameters(baseToken.address, quoteToken.address, fixture.parameters.strike, fixture.parameters.expiry, fixture.parameters.isCall)
+    false_oid = await fixture.house.core.getOIdFromParameters(Alice, Alice, fixture.parameters.strike, fixture.parameters.expiry, fixture.parameters.isCall)
 
 
     // 9. get the tokens for the oid
@@ -232,7 +225,7 @@ describe("House integration tests", function () {
     // deposit quote tokens to balance
     let depositParams: any = venue.interface.encodeFunctionData('depositToken', [
       quoteToken.address,
-      amount.mul(strikePrice).div(parseEther('1')),
+      amount.mul(fixture.parameters.strike).div(parseEther('1')),
       Alice,
     ])
     await expect(house.execute(1, venue.address, depositParams))
@@ -264,7 +257,7 @@ describe("House integration tests", function () {
     await expect(house.execute(1, venue.address, params)).to.emit(house, 'Executed').withArgs(signer.address, venue.address)
     let postBaseBal = await quoteToken.balanceOf(Alice)
     let baseBalDiff = ethers.BigNumber.from(postBaseBal).sub(prevBaseBal)
-    expect(baseBalDiff).to.eq(amount.mul(strikePrice).div(parseEther('1')))
+    expect(baseBalDiff).to.eq(amount.mul(fixture.parameters.strike).div(parseEther('1')))
   })
 
   it('Caller can use venue to close options when they hold wrapped option tokens (which contain both long and short tokens)', async () => {

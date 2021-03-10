@@ -79,6 +79,15 @@ export interface HouseTestFixture {
   tokens: Contract[]
   multiToken: Contract
   venue: Contract
+  parameters: OptionParameters
+}
+
+export interface OptionParameters {
+  underlying: Contract
+  quoteToken: Contract
+  strike: BigNumber
+  expiry: Number
+  isCall: Boolean
 }
 
 export async function houseTestFixture([wallet]: Wallet[], provider): Promise<HouseTestFixture> {
@@ -87,13 +96,23 @@ export async function houseTestFixture([wallet]: Wallet[], provider): Promise<Ho
   let tokens: Contract[] = await deployTokens(wallet, 2, ['tokenA', 'tokenB'])
   let multiToken: Contract = await deployContract(wallet, MultiToken, [], overrides)
   let venue = await deployContract(wallet, BasicVenue, [uniswap.weth.address, house.house.address, multiToken.address], overrides)
+  let underlying = tokens[0]
+  let quoteToken = tokens[1]
+  let strike = parseEther('1000')
+  let expiry = 1615190111
+  let isCall = true
+
+  let parameters: OptionParameters = {
+    underlying, quoteToken, strike, expiry, isCall
+  }
 
   return {
     house,
     uniswap,
     tokens,
     multiToken,
-    venue
+    venue,
+    parameters
   }
 }
 /*
