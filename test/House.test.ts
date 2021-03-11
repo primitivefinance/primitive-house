@@ -217,7 +217,7 @@ describe("House integration tests", function () {
 
   })
 
-  it('Swap venue can be used to add redeem liquidity to a pool', async () => {
+  it('Swap venue can be used to create a new redeem/underlying pool and add liquidity', async () => {
     let params: any = venue.interface.encodeFunctionData('addRedeemLiquidityWithUnderlying', [oid, parseEther('1'), deadline])
     await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
 
@@ -229,6 +229,32 @@ describe("House integration tests", function () {
     // check that the pool received the correct short token balance
     let shortBalance = await shortToken.balanceOf(pair)
     expect(shortBalance.eq(parseEther('1')))
+    // check that the house received the right LP token balance
+    let pairToken = tokenFromAddress(pair, signers[0])
+    let pairSupply = await pairToken.totalSupply()
+    let lpBalance = await pairToken.balanceOf(house.address)
+    // This is the creation of the pool so all the lp shares should be owned by house
+    expect(lpBalance.eq(pairSupply))
+    // check that the no underlying remains in the venue
+    let baseTokenBalance = await baseToken.balanceOf(venue.address)
+    expect(baseTokenBalance.eq(0))
+  })
+
+  it('Swap venue can be used to add liquidity to an existing redeem/underlying pool', async () => {
+    let params: any = venue.interface.encodeFunctionData('addRedeemLiquidityWithUnderlying', [oid, parseEther('1'), deadline])
+    // add initial liquidity
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+    // add liquidity a second time
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+
+    // check that house has the correct long token balance
+    let longBalance = await longToken.balanceOf(house.address)
+    expect(longBalance.eq(parseEther('2')))
+    // get the swap pair
+    let pair = await uniswapFactory.getPair(shortToken.address, baseToken.address)
+    // check that the pool received the correct short token balance
+    let shortBalance = await shortToken.balanceOf(pair)
+    expect(shortBalance.eq(parseEther('2')))
     // check that the house received the right LP token balance
     let pairToken = tokenFromAddress(pair, signers[0])
     let pairSupply = await pairToken.totalSupply()
