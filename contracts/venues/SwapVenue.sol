@@ -37,6 +37,34 @@ contract SwapVenue is VaultVenue {
     }
 
     // ===== Mutable =====
+    /*
+     * @notice Mints amount of option oid and adds liquidity to redeem/underlying.
+     */
+    function addRedeemLiquidityWithUnderlying(
+      bytes32 oid,
+      uint256 amount
+    ) external returns (uint256){
+      // get parameters from option
+      (address underlying, , , ,) = _house.getParameters(oid);
+
+      address[] memory receivers = new address[](2);
+      // house will keep option tokens
+      receivers[0] = address(_house);
+      // this contract gets redeem tokens
+      receivers[1] = address(this);
+
+      console.log("minting options");
+      // mint options using house, sending redeem tokens to this contract and keeping exercise tokens in the house.
+      _mintOptions(oid, amount, receivers, false);
+      // get redeem token address
+      (, address redeem) = _house.getOptionTokens(oid);
+
+      // pull additional underlying tokens from caller
+      // add liquidity to the pool with underlying/redeem tokens using all the redeem tokens up
+      // store LP tokens in house
+      // either return excess underlying to the caller or add it to their balance in house?
+      // emit event?
+    }
 
     /**
      * @notice A basic function to deposit an option into a wrap token, and return it to the _house.
