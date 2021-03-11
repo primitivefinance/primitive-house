@@ -117,7 +117,7 @@ describe("House integration tests", function () {
     let uniswapRouter = await deployContract(signer, UniswapV2Router02, [uniswapFactory.address, weth.address], {gasLimit: 9500000})
 
     // 5. deploy venue
-    venue = await deploy('BasicVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address] })
+    venue = await deploy('SwapVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address, uniswapFactory.address, uniswapRouter.address] })
 
     // 6. deploy core with the house as the manager
     core = await deploy('Core', { from: signers[0], args: [house.address] })
