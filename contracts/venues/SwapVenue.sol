@@ -12,6 +12,14 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import {VaultVenue} from "./VaultVenue.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 
+// Uniswap
+import {
+    IUniswapV2Router02
+} from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import {
+    IUniswapV2Factory
+} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+
 import "hardhat/console.sol";
 
 contract SwapVenue is VaultVenue {
@@ -19,9 +27,9 @@ contract SwapVenue is VaultVenue {
     using SafeMath for uint256; // Reverts on math underflows/overflows
 
     // the UniswapV2Factory address used by this venue
-    address public factory;
+    IUniswapV2Factory public factory;
     // the UniswapV2Router02 address used by this venue
-    address public router;
+    IUniswapV2Router02 public router;
 
     // ===== Constructor =====
 
@@ -32,8 +40,8 @@ contract SwapVenue is VaultVenue {
         address factory_,
         address router_
     ) VaultVenue(weth_, house_, wToken_) {
-      factory = factory_;
-      router = router_;
+      factory = IUniswapV2Factory(factory_);
+      router = IUniswapV2Router02(router_);
     }
 
     // ===== Mutable =====
@@ -42,7 +50,8 @@ contract SwapVenue is VaultVenue {
      */
     function addRedeemLiquidityWithUnderlying(
       bytes32 oid,
-      uint256 amount
+      uint256 amount,
+      uint256 deadline
     ) external returns (uint256){
       // get parameters from option
       (address underlying, , , ,) = _house.getParameters(oid);
@@ -59,9 +68,26 @@ contract SwapVenue is VaultVenue {
       // get redeem token address
       (, address redeem) = _house.getOptionTokens(oid);
 
-      // pull additional underlying tokens from caller
+      // pull additional underlying tokens from caller TODO what is correct amount to pull
+      console.log("pulling tokens from user");
+      _house.takeTokensFromUser(underlying, amount);
+
+      // make sure both underlying and redeem are approved to be pulled by uniswap router
+      checkApproved(underlying, address(router));
+      checkApproved(redeem, address(router));
       // add liquidity to the pool with underlying/redeem tokens using all the redeem tokens up
+      console.log("add liquidity to pool");
       // store LP tokens in house
+      router.addLiquidity(
+        redeem,
+        underlying,
+        amount,
+        amount,
+        0,
+        0,
+        address(_house),
+        deadline
+      );
       // either return excess underlying to the caller or add it to their balance in house?
       // emit event?
     }

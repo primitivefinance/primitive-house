@@ -217,7 +217,7 @@ describe("House integration tests", function () {
   })
 
   it('Swap venue can be used to add redeem liquidity to a pool', async () => {
-    let params: any = venue.interface.encodeFunctionData('addRedeemLiquidityWithUnderlying', [oid, parseEther('1')])
+    let params: any = venue.interface.encodeFunctionData('addRedeemLiquidityWithUnderlying', [oid, parseEther('1'), deadline])
     await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
   })
 
