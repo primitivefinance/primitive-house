@@ -31,6 +31,7 @@ describe("House integration tests", function () {
   let oid: string
   let false_oid: string
   let longToken: Contract, shortToken: Contract
+  let uniswapFactory: Contract, uniswapRouter: Contract
 
   const deadline = Math.floor(Date.now() / 1000) + 60 * 20
 
@@ -113,8 +114,8 @@ describe("House integration tests", function () {
     // 4. deploy house
     house = await deploy('House', { from: signers[0], args: [AddressZero] })
 
-    let uniswapFactory = await deployContract(signer, UniswapV2Factory, [signer.address], {gasLimit: 9500000})
-    let uniswapRouter = await deployContract(signer, UniswapV2Router02, [uniswapFactory.address, weth.address], {gasLimit: 9500000})
+    uniswapFactory = await deployContract(signer, UniswapV2Factory, [signer.address], {gasLimit: 9500000})
+    uniswapRouter = await deployContract(signer, UniswapV2Router02, [uniswapFactory.address, weth.address], {gasLimit: 9500000})
 
     // 5. deploy venue
     venue = await deploy('SwapVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address, uniswapFactory.address, uniswapRouter.address] })
