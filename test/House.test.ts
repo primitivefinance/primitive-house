@@ -224,6 +224,20 @@ describe("House integration tests", function () {
     // check that house has the correct long token balance
     let longBalance = await longToken.balanceOf(house.address)
     expect(longBalance.eq(parseEther('1')))
+    // get the swap pair
+    let pair = await uniswapFactory.getPair(shortToken.address, baseToken.address)
+    // check that the pool received the correct short token balance
+    let shortBalance = await shortToken.balanceOf(pair)
+    expect(shortBalance.eq(parseEther('1')))
+    // check that the house received the right LP token balance
+    let pairToken = tokenFromAddress(pair, signers[0])
+    let pairSupply = await pairToken.totalSupply()
+    let lpBalance = await pairToken.balanceOf(house.address)
+    // This is the creation of the pool so all the lp shares should be owned by house
+    expect(lpBalance.eq(pairSupply))
+    // check that the no underlying remains in the venue
+    let baseTokenBalance = await baseToken.balanceOf(venue.address)
+    expect(baseTokenBalance.eq(0))
   })
 
   it('Caller can use a valid venue to borrow options without collateral', async () => {
