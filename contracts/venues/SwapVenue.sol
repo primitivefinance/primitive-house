@@ -88,7 +88,8 @@ contract SwapVenue is VaultVenue {
         address(_house),
         deadline
       );
-      // either return excess underlying to the caller or add it to their balance in house?
+      // return excess underlying tokens to caller
+      IERC20(underlying).safeTransfer(_house.getExecutingCaller(), IERC20(underlying).balanceOf(address(this)));
       // emit event?
     }
 
