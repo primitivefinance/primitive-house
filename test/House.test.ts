@@ -266,6 +266,29 @@ describe("House integration tests", function () {
     expect(baseTokenBalance.eq(0))
   })
 
+  it('Swap venue can be used to create a new option/underlying pool and add liquidity', async () => {
+    let params: any = venue.interface.encodeFunctionData('addRedeemLiquidityWithUnderlying', [oid, parseEther('1'), deadline])
+    await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
+
+    // check that house has the correct long token balance
+    let shortBalance = await shortToken.balanceOf(house.address)
+    expect(shortBalance.eq(parseEther('1')))
+    // get the swap pair
+    let pair = await uniswapFactory.getPair(shortToken.address, baseToken.address)
+    // check that the pool received the correct short token balance
+    let longBalance = await longToken.balanceOf(pair)
+    expect(longBalance.eq(parseEther('1')))
+    // check that the house received the right LP token balance
+    let pairToken = tokenFromAddress(pair, signers[0])
+    let pairSupply = await pairToken.totalSupply()
+    let lpBalance = await pairToken.balanceOf(house.address)
+    // This is the creation of the pool so all the lp shares should be owned by house
+    expect(lpBalance.eq(pairSupply))
+    // check that the no underlying remains in the venue
+    let baseTokenBalance = await baseToken.balanceOf(venue.address)
+    expect(baseTokenBalance.eq(0))
+  })
+
   it('Caller can use a valid venue to borrow options without collateral', async () => {
     let params: any = venue.interface.encodeFunctionData('borrowOptionTest', [oid, parseEther('1')])
     await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)

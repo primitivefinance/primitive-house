@@ -93,6 +93,54 @@ contract SwapVenue is VaultVenue {
       // emit event?
     }
 
+    /*
+     * @notice Mints amount of option oid and adds liquidity to option/underlying.
+     */
+    function addOptionLiquidityWithUnderlying(
+      bytes32 oid,
+      uint256 amount,
+      uint256 deadline
+    ) external returns (uint256){
+      // get parameters from option
+      (address underlying, , , ,) = _house.getParameters(oid);
+
+      address[] memory receivers = new address[](2);
+      // this contract gets option tokens
+      receivers[0] = address(this);
+      // the house gets redeem tokens
+      receivers[1] = address(_house);
+
+      console.log("minting options");
+      // mint options using house, sending redeem tokens to this contract and keeping exercise tokens in the house.
+      _mintOptions(oid, amount, receivers, false);
+      // get option token address
+      (address option, ) = _house.getOptionTokens(oid);
+
+      // pull additional underlying tokens from caller TODO what is correct amount to pull
+      console.log("pulling tokens from user");
+      _house.takeTokensFromUser(underlying, amount);
+
+      // make sure both underlying and redeem are approved to be pulled by uniswap router
+      checkApproved(underlying, address(router));
+      checkApproved(option, address(router));
+      // add liquidity to the pool with underlying/redeem tokens using all the redeem tokens up
+      console.log("add liquidity to pool");
+      // store LP tokens in house
+      router.addLiquidity(
+        option,
+        underlying,
+        amount,
+        amount,
+        0,
+        0,
+        address(_house),
+        deadline
+      );
+      // return excess underlying tokens to caller
+      IERC20(underlying).safeTransfer(_house.getExecutingCaller(), IERC20(underlying).balanceOf(address(this)));
+      // emit event?
+    }
+
     /**
      * @notice A basic function to deposit an option into a wrap token, and return it to the _house.
      */
