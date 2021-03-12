@@ -1,6 +1,6 @@
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address'
 import chai, { expect } from 'chai'
-import { solidity } from 'ethereum-waffle'
+import { solidity, deployContract } from 'ethereum-waffle'
 chai.use(solidity)
 import { BigNumber, BigNumberish, Contract } from 'ethers'
 import { parseEther, formatEther } from 'ethers/lib/utils'
@@ -12,6 +12,9 @@ import {} from './lib/protocol'
 import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
 const { AddressZero } = ethers.constants
+
+import UniswapV2Factory from '@uniswap/v2-core/build/UniswapV2Factory.json'
+import UniswapV2Router02 from '@uniswap/v2-periphery/build/UniswapV2Router02.json'
 
 describe("House integration tests", function () {
 
@@ -28,6 +31,7 @@ describe("House integration tests", function () {
   let oid: string
   let false_oid: string
   let longToken: Contract, shortToken: Contract
+  let uniswapFactory: Contract, uniswapRouter: Contract
 
   const deadline = Math.floor(Date.now() / 1000) + 60 * 20
 
@@ -109,6 +113,9 @@ describe("House integration tests", function () {
 
     // 4. deploy house
     house = await deploy('House', { from: signers[0], args: [AddressZero] })
+
+    uniswapFactory = await deployContract(signer, UniswapV2Factory, [signer.address], {gasLimit: 9500000})
+    uniswapRouter = await deployContract(signer, UniswapV2Router02, [uniswapFactory.address, weth.address], {gasLimit: 9500000})
 
     // 5. deploy venue
     venue = await deploy('BasicVenue', { from: signers[0], args: [weth.address, house.address, MultiToken.address] })
