@@ -17,13 +17,13 @@ import {
 } from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 // Internal
-import {VaultVenue} from "./VaultVenue.sol";
+import {Venue} from "./Venue.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 
 // dev
 import "hardhat/console.sol";
 
-contract SwapVenue is VaultVenue {
+contract SwapVenue is Venue {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
 
@@ -37,7 +37,7 @@ contract SwapVenue is VaultVenue {
         address house_,
         address wToken_,
         address router_
-    ) VaultVenue(weth_, house_, wToken_) {
+    ) Venue(weth_, house_, wToken_) {
       _router = IUniswapV2Router02(router_);
     }
 
