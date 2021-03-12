@@ -1,25 +1,29 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.7.1;
 
 /**
- * @title A venue used for interacting with uniswap/sushiswap.
+ * @title   SwapVenue -> used by House to interact with Uniswap or Sushiswap
+ * @author  Primitive
+ * @notice  This implementation is not complete, DO NOT DEPLOY.
  */
 
 // Open Zeppelin
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
+// Uniswap
+import {
+    IUniswapV2Factory
+} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import {
+    IUniswapV2Router02
+} from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
 // Internal
 import {VaultVenue} from "./VaultVenue.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 
-// Uniswap
-import {
-    IUniswapV2Router02
-} from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import {
-    IUniswapV2Factory
-} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
-
+// dev
 import "hardhat/console.sol";
 
 contract SwapVenue is VaultVenue {
@@ -45,41 +49,44 @@ contract SwapVenue is VaultVenue {
     }
 
     // ===== Mutable =====
-    /*
-     * @notice Mints amount of option oid and adds liquidity to redeem/underlying.
+    /**
+     * @notice  Adds short/underlying liquidity to the pool.
+     * @param   oid The target option.
+     * @param   amount How much option token to mint and add as liquidity.
+     * @param   deadline The deadline for the swap transaction.
      */
-    function addRedeemLiquidityWithUnderlying(
+    function addShortLiquidityWithUnderlying(
       bytes32 oid,
       uint256 amount,
       uint256 deadline
-    ) external returns (uint256){
+    ) external {
       // get parameters from option
       (address underlying, , , ,) = _house.getParameters(oid);
 
       address[] memory receivers = new address[](2);
-      // house will keep option tokens
+      // house will keep long tokens
       receivers[0] = address(_house);
-      // this contract gets redeem tokens
+      // this contract gets short tokens
       receivers[1] = address(this);
 
       console.log("minting options");
-      // mint options using house, sending redeem tokens to this contract and keeping exercise tokens in the house.
+      // mint options using house, sending short tokens to this contract and keeping exercise tokens in the house.
       _mintOptions(oid, amount, receivers, false);
-      // get redeem token address
-      (, address redeem) = _house.getOptionTokens(oid);
+      // get short token address
+      (, address short) = _house.getOptionTokens(oid);
 
       // pull additional underlying tokens from caller TODO what is correct amount to pull
       console.log("pulling tokens from user");
       _house.takeTokensFromUser(underlying, amount);
 
-      // make sure both underlying and redeem are approved to be pulled by uniswap router
+      // make sure both underlying and short are approved to be pulled by uniswap router
       checkApproved(underlying, address(router));
-      checkApproved(redeem, address(router));
-      // add liquidity to the pool with underlying/redeem tokens using all the redeem tokens up
+      checkApproved(short, address(router));
+      // add liquidity to the pool with underlying/short tokens using all the short tokens up
       console.log("add liquidity to pool");
       // store LP tokens in house
       router.addLiquidity(
-        redeem,
+        short,
         underlying,
         amount,
         amount,
@@ -93,41 +100,44 @@ contract SwapVenue is VaultVenue {
       // emit event?
     }
 
-    /*
-     * @notice Mints amount of option oid and adds liquidity to option/underlying.
+    /**
+     * @notice  Adds long/underlying liquidity to the pool.
+     * @param   oid The target option.
+     * @param   amount How much option token to mint and add as liquidity.
+     * @param   deadline The deadline for the swap transaction.
      */
-    function addOptionLiquidityWithUnderlying(
+    function addLongLiquidityWithUnderlying(
       bytes32 oid,
       uint256 amount,
       uint256 deadline
-    ) external returns (uint256){
+    ) external {
       // get parameters from option
       (address underlying, , , ,) = _house.getParameters(oid);
 
       address[] memory receivers = new address[](2);
-      // this contract gets option tokens
+      // this contract gets long tokens
       receivers[0] = address(this);
-      // the house gets redeem tokens
+      // the house gets short tokens
       receivers[1] = address(_house);
 
       console.log("minting options");
-      // mint options using house, sending redeem tokens to this contract and keeping exercise tokens in the house.
+      // mint options using house, sending long tokens to this contract and keeping exercise tokens in the house.
       _mintOptions(oid, amount, receivers, false);
       // get option token address
-      (address option, ) = _house.getOptionTokens(oid);
+      (address long, ) = _house.getOptionTokens(oid);
 
       // pull additional underlying tokens from caller TODO what is correct amount to pull
       console.log("pulling tokens from user");
       _house.takeTokensFromUser(underlying, amount);
 
-      // make sure both underlying and redeem are approved to be pulled by uniswap router
+      // make sure both underlying and long are approved to be pulled by uniswap router
       checkApproved(underlying, address(router));
-      checkApproved(option, address(router));
-      // add liquidity to the pool with underlying/redeem tokens using all the redeem tokens up
+      checkApproved(long, address(router));
+      // add liquidity to the pool with underlying/long tokens using all the long tokens up
       console.log("add liquidity to pool");
       // store LP tokens in house
       router.addLiquidity(
-        option,
+        long,
         underlying,
         amount,
         amount,
