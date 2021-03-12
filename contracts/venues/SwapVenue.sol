@@ -13,9 +13,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 // Uniswap
 import {
-    IUniswapV2Factory
-} from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
-import {
     IUniswapV2Router02
 } from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
@@ -30,10 +27,8 @@ contract SwapVenue is VaultVenue {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
 
-    // the UniswapV2Factory address used by this venue
-    IUniswapV2Factory public factory;
     // the UniswapV2Router02 address used by this venue
-    IUniswapV2Router02 public router;
+    IUniswapV2Router02 private _router;
 
     // ===== Constructor =====
 
@@ -41,11 +36,9 @@ contract SwapVenue is VaultVenue {
         address weth_,
         address house_,
         address wToken_,
-        address factory_,
         address router_
     ) VaultVenue(weth_, house_, wToken_) {
-      factory = IUniswapV2Factory(factory_);
-      router = IUniswapV2Router02(router_);
+      _router = IUniswapV2Router02(router_);
     }
 
     // ===== Mutable =====
@@ -80,12 +73,12 @@ contract SwapVenue is VaultVenue {
       _house.takeTokensFromUser(underlying, amount);
 
       // make sure both underlying and short are approved to be pulled by uniswap router
-      checkApproved(underlying, address(router));
-      checkApproved(short, address(router));
+      checkApproved(underlying, address(_router));
+      checkApproved(short, address(_router));
       // add liquidity to the pool with underlying/short tokens using all the short tokens up
       console.log("add liquidity to pool");
       // store LP tokens in house
-      router.addLiquidity(
+      _router.addLiquidity(
         short,
         underlying,
         amount,
@@ -131,12 +124,12 @@ contract SwapVenue is VaultVenue {
       _house.takeTokensFromUser(underlying, amount);
 
       // make sure both underlying and long are approved to be pulled by uniswap router
-      checkApproved(underlying, address(router));
-      checkApproved(long, address(router));
+      checkApproved(underlying, address(_router));
+      checkApproved(long, address(_router));
       // add liquidity to the pool with underlying/long tokens using all the long tokens up
       console.log("add liquidity to pool");
       // store LP tokens in house
-      router.addLiquidity(
+      _router.addLiquidity(
         long,
         underlying,
         amount,
@@ -149,141 +142,6 @@ contract SwapVenue is VaultVenue {
       // return excess underlying tokens to caller
       IERC20(underlying).safeTransfer(_house.getExecutingCaller(), IERC20(underlying).balanceOf(address(this)));
       // emit event?
-    }
-
-    /**
-     * @notice A basic function to deposit an option into a wrap token, and return it to the _house.
-     */
-    function mintOptionsThenWrap(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public returns (bool) {
-        // Receivers are this address
-        address[] memory receivers = new address[](2);
-        receivers[0] = address(this);
-        receivers[1] = address(this);
-
-        console.log("minting options");
-        // Call the _house to mint options, pulls base tokens to the _house from the executing caller
-        _mintOptions(oid, amount, receivers, false);
-        // Get option addresses
-        (address long, address short) = _house.getOptionTokens(oid);
-        // Send option tokens to a wrapped token, which is then sent back to the _house.
-        _wrapOptionForHouse(oid, amount);
-        return true;
-    }
-// let a venue borrow options. TEST FUNCTION ONLY DO NOT DEPLOY
-// todo make specific VenueTest.sol with test utility fns
-    function borrowOptionTest(
-      bytes32 oid,
-      uint256 amount
-    ) public returns (bool) {
-      // Receivers are this address
-      address[] memory receivers = new address[](2);
-      receivers[0] = address(this);
-      receivers[1] = address(this);
-
-      _house.borrowOptions(oid, amount, receivers);
-      return true;
-    }
-
-    /**
-     * @notice  Exercises the `oid` option using the balance of the long stored in this contract.
-     */
-    function exerciseFromBalance(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public {
-        (address long, ) = _house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
-        console.log("checking balance in venue", balance, amount);
-        require(balance >= amount, "Venue: ABOVE_MAX");
-        // exercise options using the House
-        console.log("venue._exerciseOptions");
-        _exerciseOptions(oid, amount, receiver, true);
-    }
-
-    function exerciseFromWrappedBalance(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public {
-        // Receivers are this address
-        address[] memory receivers = new address[](2);
-        receivers[0] = address(this);
-        receivers[1] = address(this);
-        splitOptionsAndDeposit(oid, amount, receivers);
-        (address long, ) = _house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
-        console.log("checking balance in venue", balance, amount);
-        require(balance >= amount, "Venue: ABOVE_MAX");
-        // exercise options using the House
-        console.log("venue._exerciseOptions");
-        _exerciseOptions(oid, amount, receiver, true);
-    }
-
-    function redeemFromBalance(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public {
-        (, address short) = _house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[_house.getExecutingCaller()][short];
-        console.log("checking balance in venue", balance, amount);
-        require(balance >= amount, "Venue: ABOVE_MAX");
-        // exercise options using the House
-        console.log("venue._exerciseOptions");
-        _redeemOptions(oid, amount, receiver, true);
-    }
-
-    function closeFromWrappedBalance(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public {
-        // Receivers are this address
-        address[] memory receivers = new address[](2);
-        receivers[0] = address(this);
-        receivers[1] = address(this);
-        splitOptionsAndDeposit(oid, amount, receivers);
-
-        (address long, ) = _house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
-        console.log("checking balance in venue", balance, amount);
-        require(balance >= amount, "Venue: ABOVE_MAX");
-        // exercise options using the House
-        console.log("venue._exerciseOptions");
-        _closeOptions(oid, amount, receiver, true);
-    }
-
-    function closeFromBalance(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public {
-        (address long, ) = _house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
-        console.log("checking balance in venue", balance, amount);
-        require(balance >= amount, "Venue: ABOVE_MAX");
-        // exercise options using the House
-        console.log("venue._closeOptions");
-        _closeOptions(oid, amount, receiver, true);
-    }
-
-    function close(
-        bytes32 oid,
-        uint256 amount,
-        address receiver
-    ) public {
-        (address long, ) = _house.getOptionTokens(oid);
-        uint256 balance = balanceOfUser[_house.getExecutingCaller()][long];
-        console.log("checking balance in venue", balance, amount);
-        require(balance >= amount, "Venue: ABOVE_MAX");
-        // exercise options using the House
-        console.log("venue._closeOptions");
-        _closeOptions(oid, amount, receiver, false);
     }
 
     // ===== Test =====
