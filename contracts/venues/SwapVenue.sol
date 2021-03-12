@@ -17,13 +17,14 @@ import {
 } from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 // Internal
+import {ISwapVenue} from "../interfaces/ISwapVenue.sol";
 import {Venue} from "./Venue.sol";
 import {SafeMath} from "../libraries/SafeMath.sol";
 
 // dev
 import "hardhat/console.sol";
 
-contract SwapVenue is Venue {
+contract SwapVenue is Venue, ISwapVenue {
     using SafeERC20 for IERC20; // Reverts when `transfer` or `transferFrom` erc20 calls don't return proper data
     using SafeMath for uint256; // Reverts on math underflows/overflows
 
@@ -52,7 +53,7 @@ contract SwapVenue is Venue {
       bytes32 oid,
       uint256 amount,
       uint256 deadline
-    ) external {
+    ) external override {
       // get parameters from option
       (address underlying, , , ,) = _house.getParameters(oid);
 
@@ -103,7 +104,7 @@ contract SwapVenue is Venue {
       bytes32 oid,
       uint256 amount,
       uint256 deadline
-    ) external {
+    ) external override {
       // get parameters from option
       (address underlying, , , ,) = _house.getParameters(oid);
 
