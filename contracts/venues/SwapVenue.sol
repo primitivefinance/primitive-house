@@ -42,6 +42,14 @@ contract SwapVenue is Venue, ISwapVenue {
       _router = IUniswapV2Router02(router_);
     }
 
+    event AddedLiquidity(
+      address tokenA,
+      address tokenB,
+      uint256 amountA,
+      uint256 amountB,
+      uint256 liquidity
+    );
+
     // ===== Mutable =====
     /**
      * @notice  Adds short/underlying liquidity to the pool.
@@ -79,7 +87,7 @@ contract SwapVenue is Venue, ISwapVenue {
       // add liquidity to the pool with underlying/short tokens using all the short tokens up
       console.log("add liquidity to pool");
       // store LP tokens in house
-      _router.addLiquidity(
+      (uint256 amountA, uint256 amountB, uint256 liquidity) = _router.addLiquidity(
         short,
         underlying,
         amount,
@@ -89,6 +97,7 @@ contract SwapVenue is Venue, ISwapVenue {
         address(_house),
         deadline
       );
+      emit AddedLiquidity(short, underlying, amountA, amountB, liquidity);
       // return excess underlying tokens to caller
       IERC20(underlying).safeTransfer(_house.getExecutingCaller(), IERC20(underlying).balanceOf(address(this)));
       // emit event?
@@ -130,7 +139,7 @@ contract SwapVenue is Venue, ISwapVenue {
       // add liquidity to the pool with underlying/long tokens using all the long tokens up
       console.log("add liquidity to pool");
       // store LP tokens in house
-      _router.addLiquidity(
+      (uint256 amountA, uint256 amountB, uint256 liquidity) = _router.addLiquidity(
         long,
         underlying,
         amount,
@@ -140,6 +149,7 @@ contract SwapVenue is Venue, ISwapVenue {
         address(_house),
         deadline
       );
+      emit AddedLiquidity(long, underlying, amountA, amountB, liquidity);
       // return excess underlying tokens to caller
       IERC20(underlying).safeTransfer(_house.getExecutingCaller(), IERC20(underlying).balanceOf(address(this)));
       // emit event?
