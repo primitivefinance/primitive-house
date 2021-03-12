@@ -100,7 +100,6 @@ contract SwapVenue is Venue, ISwapVenue {
       emit AddedLiquidity(short, underlying, amountA, amountB, liquidity);
       // return excess underlying tokens to caller
       IERC20(underlying).safeTransfer(_house.getExecutingCaller(), IERC20(underlying).balanceOf(address(this)));
-      // emit event?
     }
 
     /**
@@ -152,7 +151,6 @@ contract SwapVenue is Venue, ISwapVenue {
       emit AddedLiquidity(long, underlying, amountA, amountB, liquidity);
       // return excess underlying tokens to caller
       IERC20(underlying).safeTransfer(_house.getExecutingCaller(), IERC20(underlying).balanceOf(address(this)));
-      // emit event?
     }
 
     // ===== Test =====
