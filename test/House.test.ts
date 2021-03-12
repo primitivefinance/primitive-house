@@ -266,15 +266,15 @@ describe("House integration tests", function () {
     expect(baseTokenBalance.eq(0))
   })
 
-  it('Swap venue can be used to create a new option/underlying pool and add liquidity', async () => {
-    let params: any = venue.interface.encodeFunctionData('addRedeemLiquidityWithUnderlying', [oid, parseEther('1'), deadline])
+  it('Swap venue can be used to create a new long/underlying pool and add liquidity', async () => {
+    let params: any = venue.interface.encodeFunctionData('addOptionLiquidityWithUnderlying', [oid, parseEther('1'), deadline])
     await expect(house.execute(0, venue.address, params)).to.emit(house, 'Executed').withArgs(Alice, venue.address)
 
     // check that house has the correct long token balance
     let shortBalance = await shortToken.balanceOf(house.address)
     expect(shortBalance.eq(parseEther('1')))
     // get the swap pair
-    let pair = await uniswapFactory.getPair(shortToken.address, baseToken.address)
+    let pair = await uniswapFactory.getPair(longToken.address, baseToken.address)
     // check that the pool received the correct short token balance
     let longBalance = await longToken.balanceOf(pair)
     expect(longBalance.eq(parseEther('1')))
