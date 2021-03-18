@@ -11,6 +11,7 @@ import { deployMultiToken } from './lib/MultiToken'
 import {} from './lib/protocol'
 import { log } from './lib/utils'
 import generateReport from './lib/table/generateReport'
+import { deployFactory } from './lib/uniswap'
 const { AddressZero } = ethers.constants
 
 describe('House integration tests', function () {
@@ -27,6 +28,8 @@ describe('House integration tests', function () {
   let oid: string
   let false_oid: string
   let longToken: Contract, shortToken: Contract
+  let proxyOracle: Contract, pairOracle: Contract
+  let factory: Contract
 
   const deadline = Math.floor(Date.now() / 1000) + 60 * 20
 
@@ -93,10 +96,14 @@ describe('House integration tests', function () {
   }
 
   beforeEach(async function () {
-    // 1. get signers
     signers = await ethers.getSigners()
     signer = signers[0]
     Alice = signer.address
+
+    // 1. get oracles, factories
+    proxyOracle = await deploy('ProxyPriceProvider', { from: signers[0], args: [Alice, [], []] })
+    factory = await deployFactory(signers[0], [Alice])
+    pairOracle = await deploy('PairOracle', { from: signers[0], args: [factory.address] })
 
     // 2. get weth, erc-20 tokens, and wrapped tokens
     weth = await deployWeth(signer)
@@ -137,6 +144,11 @@ describe('House integration tests', function () {
 
     // 11. set the core in the house
     await house.setCore(core.address)
+
+    // 12. oracles, add to pair oracle, add pair oracle to asset address
+    await factory.createPair(shortToken.address, baseToken.address)
+    let optionPair = await factory.getPair(shortToken.address, baseToken.address)
+    await proxyOracle.setAssetSources([optionPair], [pairOracle.address])
 
     let contractNames: string[] = ['House']
     let contracts: Contract[] = [house]

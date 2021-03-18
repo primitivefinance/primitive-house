@@ -22,11 +22,13 @@ import {IFlash} from "./interfaces/IFlash.sol";
 
 // Internal
 import {Accelerator} from "./Accelerator.sol";
+import {IProxyPriceProvider} from "./oracle/interfaces/IProxyPriceProvider.sol";
 import {IHouse} from "./interfaces/IHouse.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {Manager} from "./Manager.sol";
 import {BasicERC1155Receiver} from "./utils/BasicERC1155Receiver.sol";
+import {IMultiToken} from "./interfaces/IMultiToken.sol";
 
 import "hardhat/console.sol";
 
@@ -95,6 +97,8 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         uint256 delta;
     }
 
+    address[] public allCollateralTokens;
+
     /**
      * @dev The contract to execute transactions on behalf of the House.
      */
@@ -131,6 +135,11 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
     Warchest private _chest;
 
     /**
+     * @dev The proxy oracle contract.
+     */
+    IProxyPriceProvider private _oracle;
+
+    /**
      * @dev All the accounts from a nonce of 0 to `_accountNonce` - 1.
      */
     mapping(uint256 => Account) private _accounts;
@@ -157,8 +166,9 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         _EXECUTING = false;
     }
 
-    constructor(address core_) Manager(core_) {
+    constructor(address core_, IProxyPriceProvider oracle_) Manager(core_) {
         _accelerator = new Accelerator();
+        _oracle = oracle_;
     }
 
     // ====== Transfers ======
@@ -341,6 +351,69 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
     }
 
     // ===== Lending =====
+    uint256 internal constant BASE_FACTOR = 1e4; // Collateral factor is scaled to 1e4.
+
+    struct Market {
+        bool isListed;
+        uint16 collateralFactor;
+    }
+
+    mapping(address => Market) internal _markets;
+
+    function getMarket(address token) public view returns (Market memory) {
+        return _markets[token];
+    }
+
+    function getUnderlyingBorrowValue(uint256 accNonce)
+        public
+        view
+        returns (uint256)
+    {
+        Account storage acc = _accounts[accNonce];
+        uint256 len = allCollateralTokens.length;
+        uint256 value;
+        for (uint256 i = 0; i < len; i++) {
+            address token = allCollateralTokens[i];
+            uint256 bal = acc.debtOf[token];
+            uint256 debt = bal.mul(_chest.totalDebt).div(_chest.totalSupply);
+            uint16 collateralFactor = getMarket(token);
+            if (deby > 0) {
+                value += _oracle
+                    .getBorrow(token, debt)
+                    .mul(collateralFactor)
+                    .div(BASE_FACTOR); // multiplied by cfactor
+            }
+        }
+
+        return value;
+    }
+
+    function getCollateralUnderlyingValue(uint256 accNonce)
+        public
+        view
+        returns (uint256)
+    {
+        Account storage acc = _accounts[accNonce];
+        address multi = acc.wrappedToken;
+        require(multi != address(0x0), "House: ZERO_COLLATERAL");
+        uint256 len = acc.wrappedIds.length;
+        uint256 value;
+        for (uint256 i = 0; i < len; i++) {
+            uint256 wid = wrappedIds[i];
+            uint256 bal = acc.balanceOf[wid];
+            uint16 collateralFactor =
+                getMarket(IMultiToken(multi).getUnderlyingToken(wid));
+            if (bal > 0) {
+                value += _oracle.getCollateral(
+                    multi,
+                    wid,
+                    bal.mul(collateralFactor).div(BASE_FACTOR)
+                ); // multiplied by collateral factor
+            }
+        }
+
+        return value;
+    }
 
     /**
      * @notice  Mints options to the receiver addresses without checking collateral.
@@ -694,6 +767,10 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
      */
     function getAccelerator() public view returns (address) {
         return address(_accelerator);
+    }
+
+    function getOracle() public view returns (address) {
+        return address(_oracle);
     }
 
     // === View Hooks ===
