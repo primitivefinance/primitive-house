@@ -22,11 +22,13 @@ import {IFlash} from "./interfaces/IFlash.sol";
 
 // Internal
 import {Accelerator} from "./Accelerator.sol";
+import {IProxyPriceProvider} from "./oracle/interfaces/IProxyPriceProvider.sol";
 import {IHouse} from "./interfaces/IHouse.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {SafeMath} from "./libraries/SafeMath.sol";
 import {Manager} from "./Manager.sol";
 import {BasicERC1155Receiver} from "./utils/BasicERC1155Receiver.sol";
+import {IMultiToken} from "./interfaces/IMultiToken.sol";
 
 import "hardhat/console.sol";
 
@@ -70,23 +72,32 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
     );
 
     /**
+     * @notice House balance sheet data structure.
+     */
+    struct Warchest {
+        uint256 totalDebt;
+        uint256 totalSupply;
+    }
+
+    /**
      * @notice User account data structure.
      * 1. Depositor address
-     * 2. The wrapped ERC1155 token
-     * 3. The id for the wrapped token
-     * 4. The balance of the wrapped token
+     * 2. The wrapped ERC1155 token. Only 1 per account.
+     * 3. The ids for the wrapped tokens. Up to 4.
+     * 4. The balances of the wrapped tokens with ids.
      * 5. The debt of the underlying token
      * 6. The delta of debt in the executing block
      */
     struct Account {
         address depositor;
         address wrappedToken;
-        uint256 wrappedId;
-        uint256 balance;
-        uint256 debt;
+        uint256[] wrappedIds;
+        mapping(uint256 => uint256) balanceOf;
+        mapping(address => uint256) debtOf;
         uint256 delta;
-        uint256[] oids;
     }
+
+    address[] public allCollateralTokens;
 
     /**
      * @dev The contract to execute transactions on behalf of the House.
@@ -119,6 +130,16 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
     uint256 private _accountNonce;
 
     /**
+     * @dev The state of debt for the House.
+     */
+    Warchest private _chest;
+
+    /**
+     * @dev The proxy oracle contract.
+     */
+    IProxyPriceProvider private _oracle;
+
+    /**
      * @dev All the accounts from a nonce of 0 to `_accountNonce` - 1.
      */
     mapping(uint256 => Account) private _accounts;
@@ -145,8 +166,9 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         _EXECUTING = false;
     }
 
-    constructor(address core_) Manager(core_) {
+    constructor(address core_, IProxyPriceProvider oracle_) Manager(core_) {
         _accelerator = new Accelerator();
+        _oracle = oracle_;
     }
 
     // ====== Transfers ======
@@ -202,7 +224,7 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         uint256 amount
     ) internal returns (uint256) {
         Account storage acc = _accounts[getExecutingNonce()];
-        if (acc.wrappedToken != token || acc.wrappedId != wid) {
+        if (acc.wrappedToken != token || acc.balanceOf[wid] == uint256(0)) {
             console.log("initializing collateral");
             _initializeCollateral(acc, token, wid);
         }
@@ -213,7 +235,7 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         require(actualAmount > 0, "House: ADD_ZERO");
         console.log("add to account balance");
         // Add the tokens to the executing account state
-        acc.balance = acc.balance.add(amount);
+        acc.balanceOf[wid] += amount;
         emit CollateralDeposited(_NONCE, token, wid, amount);
         return actualAmount;
     }
@@ -234,7 +256,14 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         Account storage acc = _accounts[getExecutingNonce()];
         if (acc.wrappedToken != token) {
             console.log("initializing collateral");
-            _initializeCollateral(acc, token, wids[0]);
+            uint256 len = wids.length;
+            for (uint256 i = 0; i < len; i++) {
+                uint256 wid = wids[i];
+                uint256 bal = acc.balanceOf[wid];
+                if (bal == 0) {
+                    _initializeCollateral(acc, token, wid);
+                }
+            }
         }
 
         console.log("pull wrapped tokens");
@@ -246,6 +275,8 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         //acc.balance = acc.balance.add(amount); //FIX
         return actualAmount;
     }
+
+    uint8 private constant MAX_WIDS = uint8(4);
 
     /**
      * @notice  Called to update an Account with `_NONCE` with a `token` and `wid`.
@@ -259,11 +290,12 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         address token,
         uint256 wid
     ) internal returns (bool) {
-        console.log("acc balance", acc.balance);
-        require(acc.balance == uint256(0), "House: INITIALIZED");
+        console.log("acc balance", acc.balanceOf[wid]);
+        require(acc.balanceOf[wid] == uint256(0), "House: INITIALIZED");
+        require(acc.wrappedIds.length <= MAX_WIDS, "House: MAX_WIDS");
         console.log("setting account wrapped token and id");
         acc.wrappedToken = token;
-        acc.wrappedId = wid;
+        acc.wrappedIds.push(wid);
         return true;
     }
 
@@ -298,20 +330,89 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
 
     function _removeCollateral(
         address token,
-        uint256 wip,
+        uint256 wid,
         uint256 amount
     ) internal returns (bool) {
         Account storage acc = _accounts[getExecutingNonce()];
         console.log("checking wrapped token and id");
-        require(acc.wrappedId == wip, "House: INVALID_ID");
+        uint256 balance = acc.balanceOf[wid];
+        require(balance > 0, "House: INVALID_ID");
         require(acc.wrappedToken == token, "House: INVALID_TOKEN");
-        uint256 balance = acc.balance;
         if (amount == uint256(-1)) {
             amount = balance;
         }
-        console.log("house: acc.balance sub amount", acc.balance, amount);
-        acc.balance = acc.balance.sub(amount);
+        console.log(
+            "house: acc.balance sub amount",
+            acc.balanceOf[wid],
+            amount
+        );
+        acc.balanceOf[wid] -= amount;
         return true;
+    }
+
+    // ===== Lending =====
+    uint256 internal constant BASE_FACTOR = 1e4; // Collateral factor is scaled to 1e4.
+
+    struct Market {
+        bool isListed;
+        uint16 collateralFactor;
+    }
+
+    mapping(address => Market) internal _markets;
+
+    function getMarket(address token) public view returns (Market memory) {
+        return _markets[token];
+    }
+
+    function getUnderlyingBorrowValue(uint256 accNonce)
+        public
+        view
+        returns (uint256)
+    {
+        Account storage acc = _accounts[accNonce];
+        uint256 len = allCollateralTokens.length;
+        uint256 value;
+        for (uint256 i = 0; i < len; i++) {
+            address token = allCollateralTokens[i];
+            uint256 bal = acc.debtOf[token];
+            uint256 debt = bal.mul(_chest.totalDebt).div(_chest.totalSupply);
+            uint16 collateralFactor = getMarket(token);
+            if (deby > 0) {
+                value += _oracle
+                    .getBorrow(token, debt)
+                    .mul(collateralFactor)
+                    .div(BASE_FACTOR); // multiplied by cfactor
+            }
+        }
+
+        return value;
+    }
+
+    function getCollateralUnderlyingValue(uint256 accNonce)
+        public
+        view
+        returns (uint256)
+    {
+        Account storage acc = _accounts[accNonce];
+        address multi = acc.wrappedToken;
+        require(multi != address(0x0), "House: ZERO_COLLATERAL");
+        uint256 len = acc.wrappedIds.length;
+        uint256 value;
+        for (uint256 i = 0; i < len; i++) {
+            uint256 wid = wrappedIds[i];
+            uint256 bal = acc.balanceOf[wid];
+            uint16 collateralFactor =
+                getMarket(IMultiToken(multi).getUnderlyingToken(wid));
+            if (bal > 0) {
+                value += _oracle.getCollateral(
+                    multi,
+                    wid,
+                    bal.mul(collateralFactor).div(BASE_FACTOR)
+                ); // multiplied by collateral factor
+            }
+        }
+
+        return value;
     }
 
     /**
@@ -330,8 +431,15 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         Account storage acc = _accounts[getExecutingNonce()];
         // Update the acc delta
         acc.delta = requestAmt;
+        (address base, , , , ) = getParameters(oid);
+        // Update debt state
+        uint256 totalSupply = _chest.totalSupply;
+        uint256 totalDebt = _chest.totalDebt;
+        // standard IOU
+        uint256 shareDelta =
+            totalSupply > 0 ? requestAmt.mul(totalSupply).div(totalDebt) : 0;
         // Update acc debt balance
-        acc.balance = acc.balance.add(requestAmt);
+        acc.debtOf[base] += shareDelta;
         uint256 actualAmt = _core.dangerousMint(oid, requestAmt, receivers);
         // Reset delta by subtracting from actual amount borrowed
         acc.delta = actualAmt.sub(acc.delta);
@@ -631,12 +739,26 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
         returns (
             address,
             address,
-            uint256,
-            uint256
+            uint256[] memory,
+            uint256[] memory
         )
     {
-        Account memory acc = _accounts[accountNonce];
-        return (acc.depositor, acc.wrappedToken, acc.wrappedId, acc.balance);
+        Account storage acc = _accounts[accountNonce];
+        uint256 len = acc.wrappedIds.length;
+        uint256[] memory balances = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            balances[i] = acc.balanceOf[acc.wrappedIds[i]];
+        }
+        return (acc.depositor, acc.wrappedToken, acc.wrappedIds, balances);
+    }
+
+    function getDebtOf(uint256 accountNonce, address token)
+        public
+        view
+        returns (uint256)
+    {
+        Account storage acc = _accounts[accountNonce];
+        return acc.debtOf[token];
     }
 
     /**
@@ -645,6 +767,10 @@ contract House is Manager, Accelerator, ReentrancyGuard, BasicERC1155Receiver {
      */
     function getAccelerator() public view returns (address) {
         return address(_accelerator);
+    }
+
+    function getOracle() public view returns (address) {
+        return address(_oracle);
     }
 
     // === View Hooks ===

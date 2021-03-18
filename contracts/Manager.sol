@@ -125,7 +125,7 @@ abstract contract Manager is Ownable {
             amounts,
             ""
         );
-        return uint256(0);
+        return uint256(-1);
     }
 
     // ===== Option Core =====
